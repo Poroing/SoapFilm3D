@@ -79,6 +79,27 @@ Please run the code using the project folder that containing everything (assets,
 | `o`            | Save current mesh to `mesh.obj`                                                               |
 | `a`/`A`        | Automatically load the next mesh                                                              |
 
+## Scenes Descriptions
+
+### Sphere
+
+A buble that starts compressed.
+
+### Foam
+
+Simulate the mesh `<load-dir>/mesh001000.rec`
+
+### Foam Init
+
+Places some bubble and increase their size. One of the step of this simulation can be used
+to initialize the foam simulation.
+
+#### Parameters
+
+| Name | Effect |
+| ---- | ------ |
+| `mesh-size-m` | Number of bubbles |
+| `mesh-size-n` | Starting subdivision size of the bubbles |
 
 Citations
 --------------------
