@@ -52,6 +52,34 @@ Since FMMTL is not supported on Windows, running can be slower than expected.
 
 Please run the code using the project folder that containing everything (assets, code, etc.) as the working directory. 
 
+## Keybindings
+
+| Key            | Effect                                                                                        |
+| -------        | ------                                                                                        |
+| `q`/`Q`/Escape | quits the simulation                                                                          |
+| ` `            | Starts/Stops the simulation                                                                   |
+| `s`/`S`        | Make a step in the simulation                                                                 |
+| `m`            | Change the rendering mode to the next one                                                     |
+| `M`            | Change the rendering mode the the previous one                                                |
+| `v`            | Start vertices selection                                                                      |
+| `V`            | Stop vertices selection                                                                       |
+| `e`            | Start edge selection                                                                          |
+| `E`            | Stop edge selection                                                                           |
+| `f`            | Start face selection                                                                          |
+| `F`            | Stop face selection                                                                           |
+| `n`/`N`        | Show selected primitive information                                                           |
+| `]`            | Load the 1st mesh forward from the current one (Only works when the scene type is `load`)     |
+| `[`            | Load the 1st mesh backward from the current one (Only works when the scene type is `load`)    |
+| `}`            | Load the 10th mesh forward from the current one (Only works when the scene type is `load`)    |
+| `{`            | Load the 10th mesh backward from the current one (Only works when the scene type is `load`)   |
+| `.`            | Load the 100th mesh forward from the current one (Only works when the scene type is `load`)   |
+| `,`            | Load the 100th mesh backward from the current one (Only works when the scene type is `load`)  |
+| `>`            | Load the 1000th mesh forward from the current one (Only works when the scene type is `load`)  |
+| `<`            | Load the 1000th mesh backward from the current one (Only works when the scene type is `load`) |
+| `o`            | Save current mesh to `mesh.obj`                                                               |
+| `a`/`A`        | Automatically load the next mesh                                                              |
+
+
 Citations
 --------------------
 Da, Fang, et al. "Double bubbles sans toil and trouble: Discrete circulation-preserving vortex sheets for soap films and foams." ACM Transactions on Graphics (TOG) 34.4 (2015): 149. (http://www.cs.columbia.edu/cg/doublebubbles/)
