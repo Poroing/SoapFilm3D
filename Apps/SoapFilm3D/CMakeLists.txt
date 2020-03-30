@@ -28,8 +28,14 @@ else (GLEW_FOUND)
   message (SEND_ERROR "Unable to locate GLEW")
 endif()
 
+find_package(OpenMP)
+if (OpenMP_CXX_FOUND)
+  add_compile_options(${OpenMP_CXX_FLAGS})
+endif()
+
 include_directories (${EIGEN_INCLUDE_DIR})
 
 add_executable (SoapFilm3D ${Headers} ${Sources})
-target_link_libraries (SoapFilm3D LosTopos ${DEFAULT_LIBRARIES})
-
+if (OpenMP_CXX_FOUND)
+  target_link_libraries (SoapFilm3D LosTopos OpenMP::OpenMP_CXX ${DEFAULT_LIBRARIES})
+endif()
