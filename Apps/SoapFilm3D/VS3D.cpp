@@ -332,6 +332,8 @@ VS3D::step(double dt)
         }
     }
 
+#warning TODO Remove, this code in comments is not usable due to the circulation being stored as \
+    difference between regions.
     //    // shift all Gamma to have zero mean. it may prevent cancellation errors and help with
     //    stability. for (int region = 0; region < m_nregion; region++)
     //    {
@@ -401,6 +403,7 @@ VS3D::step(double dt)
         }
     }
 
+#warning TODO Remove, This code is for the case where there is only one bubble.
     //    // open boundary
     //    for (size_t i = 0; i < mesh().nv(); i++)
     //        if (mesh().m_is_boundary_vertex[i])
@@ -462,6 +465,7 @@ VS3D::step(double dt)
               true;
         }
 
+#warning Assuming the underlying implementation of an object.
         std::vector<GammaType> newGamma = m_Gamma->m_data;
         for (size_t i = 0; i < mesh().nv(); i++)
         {
@@ -473,6 +477,7 @@ VS3D::step(double dt)
                     {
                         double neighborhood_mean = 0;
                         int neighborhood_counter = 0;
+#warning Need to implement an abstraction to iterate over adjacent vertices.
                         for (size_t l = 0; l < mesh().m_vertex_to_edge_map[i].size(); l++)
                         {
                             LosTopos::Vec2st e = mesh().m_edges[mesh().m_vertex_to_edge_map[i][l]];
@@ -503,6 +508,7 @@ VS3D::step(double dt)
             (*m_Gamma)[i] = newGamma[i];
     }
 
+#warning Remove, This is not valid anymore, this is for the old storage type for the circulation.
     //    if (true)
     //    {
     //        for (size_t i = 0; i < mesh().nv(); i++)
@@ -648,6 +654,8 @@ VS3D::step(double dt)
                 bool s0 = surfTrack()->triangle_is_all_solid(f0);
                 bool s1 = surfTrack()->triangle_is_all_solid(f1);
 
+#warning Dangerous, if all vertices of a triangle are solid because they actually in contact with \
+    a solid this can let air escape even though it shouldn't.
                 if ((s0 && !s1) || (s1 && !s0)) // this is an open boundary edge
                 {
                     size_t f = (s0 ? f1 : f0);
@@ -814,6 +822,7 @@ VS3D::step(double dt)
 
     size_t nc = relevant_constrained_vertices.size();
 
+#warning There should be a way to factorize this with the BiotSavart function.
     if (nc > 0)
     {
         std::vector<Vec2i> constrained_vertex_region_pair(
@@ -871,6 +880,7 @@ VS3D::step(double dt)
             // Biot-Savart for constrained vertex i
             size_t i = m_constrained_vertices[relevant_constrained_vertices[ii]];
 
+#warning What is this quantity for?
             Vec3d v(0, 0, 0);
             Vec3d x = pos(i);
 
@@ -946,6 +956,8 @@ VS3D::step(double dt)
             (*m_Gamma)[i].set(rp, (*m_Gamma)[i].get(rp) + result[ii]);
         }
     }
+
+#warning There might be a way to reuse the computation of the previous BiotSavart
     // recompute the velocity after the constraint projection
     newv = BiotSavart(*this, VecXd::Zero(mesh().nv() * 3));
     for (size_t i = 0; i < mesh().nv(); i++)
