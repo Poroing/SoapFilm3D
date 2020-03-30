@@ -31,11 +31,10 @@ endif()
 find_package(OpenMP)
 if (OpenMP_CXX_FOUND)
   add_compile_options(${OpenMP_CXX_FLAGS})
+  set (DEFAULT_LIBRARIES ${DEFAULT_LIBRARIES} OpenMP::OpenMP_CXX)
 endif()
 
 include_directories (${EIGEN_INCLUDE_DIR})
 
 add_executable (SoapFilm3D ${Headers} ${Sources})
-if (OpenMP_CXX_FOUND)
-  target_link_libraries (SoapFilm3D LosTopos OpenMP::OpenMP_CXX ${DEFAULT_LIBRARIES})
-endif()
+target_link_libraries (SoapFilm3D LosTopos ${DEFAULT_LIBRARIES})
