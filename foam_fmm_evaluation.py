@@ -39,7 +39,8 @@ working_directory.mkdir(exist_ok=True)
 
 for size in sizes:
     experiment_path = working_directory / f'Size{size}'
-    shutil.rmtree(experiment_path.as_posix())
+    if experiment_path.exists():
+        shutil.rmtree(experiment_path.as_posix())
     experiment_path.mkdir()
 
     experiment_config_file = experiment_path / 'config.txt'
