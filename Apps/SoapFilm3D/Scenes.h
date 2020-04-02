@@ -35,6 +35,7 @@ public:
     static VS3D * sceneStraw             (Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     static VS3D * sceneCarousel          (Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     static VS3D * sceneOctahedron        (Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
+    static VS3D * sceneBubbleLattice     (Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     
     // scene-specific time evolution
     static void stepSphere             (double dt, Sim * sim, VS3D * vs);
@@ -56,6 +57,7 @@ public:
     static void stepStraw              (double dt, Sim * sim, VS3D * vs);
     static void stepCarousel           (double dt, Sim * sim, VS3D * vs);
     static void stepOctahedron         (double dt, Sim * sim, VS3D * vs);
+    static void stepBubbleLattice      (double dt, Sim * sim, VS3D * vs);
 
 };
 
