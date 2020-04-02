@@ -167,6 +167,7 @@ namespace
         Clock t1;
         std::vector<result_type> result = A * charges;
         double time1 = t1.seconds();
+        std::cout << "FMMExecution " << time1 << std::endl;
         
         VecXd vel = VecXd::Zero(vs.mesh().nv() * 3);
         for (size_t i = 0; i < vs.mesh().nv(); i++)
