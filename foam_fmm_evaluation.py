@@ -48,27 +48,31 @@ working_directory = pathlib.Path('BubbleLattice')
 working_directory.mkdir(exist_ok=True)
 
 for size in sizes:
+    print(f'Starting experiment of size {size}.')
     experiment_path = working_directory / f'Size{size}' / getMethodSubdirectory(args.no_fmmtl)
     if experiment_path.exists():
+        print(f'Output directory {experiment_path.as_posix()} was present, deleting.')
         shutil.rmtree(experiment_path.as_posix())
     experiment_path.mkdir(parents=True)
 
     experiment_config_file = experiment_path / 'config.txt'
+    print(f'Saving configuration at {experiment_config_file.as_posix()}')
     experiment_config_file.write_text(config.format(
         bubble_lattice_size=size,
         fmmtl_enable=0 if args.no_fmmtl else 1))
 
+    print(f'Starting the simulation')
     completed_process = subprocess.run(
             ['./SoapFilm3D', experiment_config_file.as_posix(), 'headless'],
             capture_output=True,
             text=True)
 
-    getMostRecentOutputDirectory().rename(experiment_path / 'output')
-
     if completed_process.returncode != 0:
+        print('An error as occured during the simulation, skiping')
         (experiment_path / 'error').touch()
         continue
 
+    print('Writing result file')
     fmm_execution_time = []
     for line in completed_process.stdout.split('\n'):
         if line.startswith(getTimePrefix(args.no_fmmtl)):
