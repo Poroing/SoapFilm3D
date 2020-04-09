@@ -37,6 +37,7 @@ namespace
 
     VecXd BiotSavart_naive(VS3D & vs, const VecXd & dx)
     {
+        Clock t1;
         VecXd vel = VecXd::Zero(vs.mesh().nv() * 3);
         for (size_t i = 0; i < vs.mesh().nv(); i++)
         {
@@ -92,6 +93,7 @@ namespace
             v /= (4 * M_PI);
             vel.segment<3>(i * 3) = v;
         }
+        std::cout << "NaiveExecution " << t1.seconds() << std::endl;
         
         return vel;
     }
