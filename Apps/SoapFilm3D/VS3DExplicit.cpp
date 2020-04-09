@@ -102,6 +102,7 @@ namespace
     {
         // code adapted from FMMTL example test "error_biot.cpp"
         
+        Clock t1;
         // Init the FMM Kernel and options
         FMMOptions opts = get_options(0, NULL);
 //        typedef BiotSpherical kernel_type;
@@ -166,10 +167,7 @@ namespace
         A.set_options(opts);
         
         // Execute the FMM
-        Clock t1;
         std::vector<result_type> result = A * charges;
-        double time1 = t1.seconds();
-        std::cout << "FMMExecution " << time1 << std::endl;
         
         VecXd vel = VecXd::Zero(vs.mesh().nv() * 3);
         for (size_t i = 0; i < vs.mesh().nv(); i++)
@@ -180,6 +178,8 @@ namespace
         }
         
         vel /= (4 * M_PI);
+
+        std::cout << "FMMExecution " << t1.seconds() << std::endl;
         
         return vel;
     }

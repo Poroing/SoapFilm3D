@@ -6,9 +6,9 @@ smoothing-coef		10
 damping-coef		1
 fmmtl {fmmtl_enable}
 
-output-png			1
+output-png			0
 output-png-every-n-frames	0
-output-mesh			1
+output-mesh			{output_mesh}
 output-mesh-every-n-frames	0
 
 remeshing-resolution	0.2
