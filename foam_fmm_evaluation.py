@@ -76,21 +76,15 @@ for size in sizes:
             bubble_lattice_size=size,
             fmmtl_enable=int(method == 'fmmtl'),
             output_mesh=int(args.save_mesh),
-            output_mesh_every_n_frames=args.save_mesh_period))
+            output_mesh_every_n_frames=args.save_mesh_period,
+            output_directory=experiment_path/"output"))
 
         print(f'Starting the simulation')
         completed_process = subprocess.run(
                 ['./SoapFilm3D', experiment_config_file.as_posix(), 'headless'],
                 capture_output=True,
                 text=True)
-
-        output_path = getMostRecentOutputDirectory()
-        if args.save_mesh:
-            output_path.rename(experiment_path / 'output')
-        else:
-            shutil.rmtree(output_path.as_posix(), ignore_errors=True)
             
-
         if completed_process.returncode != 0:
             print('An error as occured during the simulation, skiping')
             (experiment_path / 'error').touch()

@@ -76,6 +76,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("stretching", 5000.0);
     Options::addDoubleOption("bending", 250.0);
 
+    Options::addStringOption("output-dir", "_");
     Options::addBooleanOption("output-png", true);
     Options::addIntegerOption("output-png-every-n-frames",
                               0); // 0 means synching with simulation frame rate (equivalent to 1).
@@ -129,9 +130,16 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
 
     if (save_outputs)
     {
-        std::stringstream output_dir_ss;
-        output_dir_ss << "output_" << ::time(NULL);
-        m_output_directory = output_dir_ss.str();
+        if (Options::strValue("output-dir") == "_")
+        {
+            std::stringstream output_dir_ss;
+            output_dir_ss << "output_" << ::time(NULL);
+            m_output_directory = output_dir_ss.str();
+        }
+        else
+        {
+            m_output_directory = Options::strValue("output-dir");
+        }
 #ifdef WIN32
         _mkdir(m_output_directory.c_str());
 #else
