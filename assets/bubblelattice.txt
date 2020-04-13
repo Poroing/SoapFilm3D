@@ -1,6 +1,6 @@
 scene			bubblelattice
 time-step		0.01
-simulation-time     0.5
+simulation-time     4.0
 implicit-integration	0
 smoothing-coef		10
 damping-coef		1
@@ -9,7 +9,7 @@ fmmtl {fmmtl_enable}
 output-png			0
 output-png-every-n-frames	0
 output-mesh			{output_mesh}
-output-mesh-every-n-frames	0
+output-mesh-every-n-frames	{output_mesh_every_n_frames}
 
 remeshing-resolution	0.2
 remeshing-iterations	1

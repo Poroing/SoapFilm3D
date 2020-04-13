@@ -48,6 +48,7 @@ argument_parser = argparse.ArgumentParser(
 argument_parser.add_argument('lattice_max_size', type=int)
 argument_parser.add_argument('-m', '--method', action='append', choices=['fmmtl', 'naive'])
 argument_parser.add_argument('-s', '--save-mesh', action='store_true')
+argument_parser.add_argument('-T', '--save-mesh-period', type=int, default=1)
 argument_parser.add_argument('-o', '--output-directory', default='BubbleLattice')
 argument_parser.add_argument('-c', '--config', default='assets/bubblelattice.txt')
 args = argument_parser.parse_args()
@@ -74,7 +75,8 @@ for size in sizes:
         experiment_config_file.write_text(config.format(
             bubble_lattice_size=size,
             fmmtl_enable=int(method == 'fmmtl'),
-            output_mesh=int(args.save_mesh)))
+            output_mesh=int(args.save_mesh),
+            output_mesh_every_n_frames=args.save_mesh_period))
 
         print(f'Starting the simulation')
         completed_process = subprocess.run(
