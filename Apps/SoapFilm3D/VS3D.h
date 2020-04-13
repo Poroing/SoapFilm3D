@@ -60,6 +60,8 @@ public:
           LosTopos::NonDestructiveTriMesh & mesh()       { return m_st->m_mesh; }
     
     Vec3d pos(size_t v) const { return vc(m_st->pm_positions[v]); }
+
+    double getBoundingBoxVolume() const;
     
     double step(double dt);
     

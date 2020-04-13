@@ -273,6 +273,23 @@ VS3D::~VS3D()
         delete m_constraint_stepper;
 }
 
+double VS3D::getBoundingBoxVolume() const
+{
+    double min_x = std::numeric_limits<double>::infinity();
+    double min_y = std::numeric_limits<double>::infinity();
+    double max_x = -min_x;
+    double max_y = -min_y;
+    for (std::size_t vertex_index = 0; vertex_index < mesh().nv(); ++vertex_index)
+    {
+        Vec3d vertex = pos(vertex_index);
+        min_x = std::min(vertex.x(), min_x);
+        min_y = std::min(vertex.y(), min_y);
+        max_x = std::max(vertex.x(), max_x);
+        max_y = std::max(vertex.y(), max_y);
+    }
+    return (max_x - min_x) * (max_y - min_y);
+}
+
 namespace
 {
 Mat3d

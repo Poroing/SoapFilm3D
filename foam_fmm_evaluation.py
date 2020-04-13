@@ -2,6 +2,10 @@ import pathlib
 import subprocess
 import argparse
 import shutil
+import csv
+
+CONFIG_FILE_PATH = pathlib.Path('assets/bubblelattice.txt')
+RESULT_FILE_NAME = 'result.csv'
 
 def getOutputDirectoryTime(output_directory_path):
     return int(output_directory_path.name[len('output_'):])
@@ -35,24 +39,28 @@ def getMethodSubdirectory(method):
     else:
         return 'Naive'
 
+def getDataPrefixes(method):
+    return [ getTimePrefix(method), 'NumberVertices', 'VertexDensity' ]
+
 argument_parser = argparse.ArgumentParser(
         description='Run foam experiment of increasing size and record the time took to execute the'
             'Fast Multipole Method')
 argument_parser.add_argument('lattice_max_size', type=int)
 argument_parser.add_argument('-m', '--method', action='append', choices=['fmmtl', 'naive'])
 argument_parser.add_argument('-s', '--save-mesh', action='store_true')
+argument_parser.add_argument('-o', '--output-directory', default='BubbleLattice')
+argument_parser.add_argument('-c', '--config', default='assets/bubblelattice.txt')
 args = argument_parser.parse_args()
 
 sizes = [ i for i in range(1, args.lattice_max_size + 1) ]
 
-config_file = pathlib.Path('assets/bubblelattice.txt')
-config = config_file.read_text()
+config = pathlib.Path(args.config).read_text()
+output_directory = pathlib.Path(args.output_directory)
 
-working_directory = pathlib.Path('BubbleLattice')
-working_directory.mkdir(exist_ok=True)
+output_directory.mkdir(parents=True,exist_ok=True)
 
 for size in sizes:
-    experiment_size_path = experiment_path = working_directory / f'Size{size}'
+    experiment_size_path = experiment_path = output_directory / f'Size{size}'
     for method in args.method:
         print(f'Starting experiment of size {size}.')
         experiment_path = experiment_size_path / getMethodSubdirectory(method)
@@ -87,11 +95,18 @@ for size in sizes:
             continue
 
         print('Writing result file')
-        execution_time = []
+        data_prefixes = getDataPrefixes(method)
+        data = { data_prefix : [] for data_prefix in data_prefixes }
         for line in completed_process.stdout.split('\n'):
-            if line.startswith(getTimePrefix(method)):
-                execution_time.append(float(line.split()[-1]))
+            line_components = line.split()
+            if len(line_components) != 2:
+                continue
+            prefix = line_components[0]
+            if prefix in data_prefixes:
+                data[prefix].append(float(line_components[-1]))
 
-        (experiment_path / 'result.csv').write_text(
-            '\n'.join(map(str, execution_time)))
+        with open((experiment_path / 'result.csv').as_posix(), mode='w') as result_file:
+            result_object = csv.writer(result_file, delimiter=' ')
+            result_object.writerow(getDataPrefixes(method))
+            result_object.writerows(zip(*[ data[prefix] for prefix in data_prefixes]))
 
