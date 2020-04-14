@@ -139,7 +139,7 @@ idle()
 
     if (g_sc.autoload)
     {
-        if (!g_sim.load(1))
+        if (!g_sim.loadNextFrame())
             exit(0);
         g_sim.vs()->update_dbg_quantities();
         g_sim.stepOutput(g_sc.headless);

@@ -34,7 +34,12 @@ public:
     double dt() const { return m_dt; }
     double time() const { return m_time; }
     
-    bool load(int inc = 1);
+    bool load(int inc);
+    /**
+     *  Loads the next frame. The increment in frame number is indicated by the option
+     *  load-increment.
+     */
+    bool loadNextFrame();
     
 public:
     enum RenderMode

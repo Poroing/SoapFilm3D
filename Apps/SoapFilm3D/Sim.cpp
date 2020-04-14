@@ -60,6 +60,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     // declare and load the options
     Options::addStringOption("scene", "T1");
     Options::addStringOption("load-dir", "");
+    Options::addIntegerOption("load-increment", 1);
     Options::addDoubleOption("time-step", 0.01);
     Options::addDoubleOption("simulation-time", 1.0);
     Options::addBooleanOption("implicit-integration", false);
@@ -391,6 +392,16 @@ Sim::stepOutput(bool headless)
 //  Loading saved simulation
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ *  Loads the next frame. The increment in frame number is indicated by the option
+ *  load-increment.
+ */
+bool Sim::loadNextFrame()
+{
+    return load(Options::intValue("load-increment"));
+}
+
 bool
 Sim::load(int inc)
 {
