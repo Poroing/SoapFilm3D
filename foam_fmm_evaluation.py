@@ -40,7 +40,7 @@ def getMethodSubdirectory(method):
         return 'Naive'
 
 def getDataPrefixes(method):
-    return [ getTimePrefix(method), 'NumberVertices', 'VertexDensity' ]
+    return [ getTimePrefix(method), 'NumberVertices', 'BoundingBoxVolume', 'NumberFaces' ]
 
 argument_parser = argparse.ArgumentParser(
         description='Run foam experiment of increasing size and record the time took to execute the'

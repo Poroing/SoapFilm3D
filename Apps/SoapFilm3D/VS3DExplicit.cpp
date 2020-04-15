@@ -199,7 +199,8 @@ VecXd
 BiotSavart(VS3D& vs, const VecXd& dx)
 {
     std::cout << "NumberVertices " << vs.mesh().nv() << std::endl;
-    std::cout << "VertexDensity " << vs.getBoundingBoxVolume() / vs.mesh().nv() << std::endl;
+    std::cout << "BoundingBoxVolume " << vs.getBoundingBoxVolume() << std::endl;
+    std::cout << "NumberFaces " << vs.mesh().nt() << std::endl;
 
 #ifndef WIN32
     if (Options::boolValue("fmmtl"))
