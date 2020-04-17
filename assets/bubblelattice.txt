@@ -1,6 +1,6 @@
 scene			bubblelattice
 time-step		0.01
-simulation-time     4.0
+simulation-time     {simulation_time}
 implicit-integration	0
 smoothing-coef		10
 damping-coef		1
@@ -12,7 +12,7 @@ output-png-every-n-frames	0
 output-mesh {output_mesh}
 output-mesh-every-n-frames {output_mesh_every_n_frames}
 
-remeshing-resolution	0.2
+remeshing-resolution	{remeshing_resolution}
 remeshing-iterations	1
     
 lostopos-collision-epsilon-fraction 1e-4
@@ -27,5 +27,5 @@ lostopos-t1-transition-enabled 1
 lostopos-t1-pull-apart-distance-fraction 0.1
 lostopos-smooth-subdivision 0
 
-mesh-size-n		2
+mesh-size-n		{subdivisions}
 mesh-size-m		{bubble_lattice_size}
