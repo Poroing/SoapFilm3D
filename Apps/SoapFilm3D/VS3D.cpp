@@ -273,7 +273,8 @@ VS3D::~VS3D()
         delete m_constraint_stepper;
 }
 
-double VS3D::getBoundingBoxVolume() const
+double
+VS3D::getBoundingBoxVolume() const
 {
     double min_x = std::numeric_limits<double>::infinity();
     double min_y = std::numeric_limits<double>::infinity();
@@ -849,18 +850,18 @@ VS3D::step(double dt)
         {
             size_t cv = m_constrained_vertices[relevant_constrained_vertices[i]];
             LosTopos::Vec2i l(-1, -1);
-            for (size_t j = 0; j < mesh().m_vertex_to_triangle_map[cv].size(); j++)
+            for (std::size_t triangle_index : mesh().m_vertex_to_triangle_map[cv])
             {
-                LosTopos::Vec3st t = mesh().get_triangle(mesh().m_vertex_to_triangle_map[cv][j]);
-                if (m_st->vertex_is_any_solid(t[0]) && m_st->vertex_is_any_solid(t[1])
-                    && m_st->vertex_is_any_solid(t[2]))
+                if (m_st->triangle_is_all_solid(triangle_index))
+                {
                     continue;
-                l = mesh().get_triangle_label(
-                  mesh().m_vertex_to_triangle_map[cv][j]); // grab any triangle on the vertex,
-                                                           // because it's manifold.
+                }
+
+                l = mesh().get_triangle_label(triangle_index); // grab any triangle on the vertex,
+                                                               // because it's manifold.
             }
-            assert(l[0] >= 0
-                   && l[1] >= 0); // this vertex can't be incident to no unconstrained triangle.
+            // this vertex can't be incident to no unconstrained triangle.
+            assert(l[0] >= 0 && l[1] >= 0);
             constrained_vertex_region_pair[i] =
               (l[0] < l[1] ? Vec2i(l[0], l[1]) : Vec2i(l[1], l[0]));
 
@@ -1133,7 +1134,7 @@ VS3D::update_dbg_quantities()
                 //                {
                 //                    curvature_i = n0.cross(n1).dot(et) / edgeArea;
                 ////                    curvature_i = angleAroundAxis(n0, n1, et) * et.norm() /
-                ///edgeArea;
+                /// edgeArea;
                 //                }
 
                 double curvature_i = n0.cross(n1).dot(et);
@@ -1210,7 +1211,7 @@ VS3D::update_dbg_quantities()
                 //                    mean_curvature = 0;
                 //                else
                 ////                    mean_curvature = second_fundamental_form.trace() / counter /
-                ///3;
+                /// 3;
                 //                    mean_curvature /= counter;
 
                 mean_curvature = mean_curvature / (vertex_area * 2);
