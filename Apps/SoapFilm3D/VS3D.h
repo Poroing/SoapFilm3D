@@ -93,7 +93,24 @@ public:
     
     int nregion() const { return m_nregion; }
     
+#warning Should be const
     bool isVertexConstrained( size_t vert );
+    Vec3d getTriangleSheetStrength(size_t triangle_index) const;
+    Vec3d getVertexOppositeEdgeInTriangle(size_t vertex_index, size_t triangle_index) const;
+    /**
+     *  Return the normal of a manifold vertex. The normal goes from the region with the lowest
+     *  index to the one with higher index.
+     */
+    Vec3d getManifoldVertexNormal(size_t vertex_index) const;
+    /**
+     *  Return the pair of incident region of a manifold vertex.
+     */
+    Vec3d getTriangleNormalTowardRegion(size_t triangle_index, int region) const
+    {
+        return vc(surfTrack()->get_triangle_normal_by_region(triangle_index, region));
+    }
+    Vec2i getManifoldVertexRegionPair(size_t vertex_index) const;
+    std::vector<int> getVertexIncidentRegions(size_t vertex_index) const;
 public:
     class GammaType
     {

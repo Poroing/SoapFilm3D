@@ -846,47 +846,14 @@ VS3D::step(double dt)
         std::vector<Vec2i> constrained_vertex_region_pair(
           nc); // one region pair for each constrained vertex
         std::vector<Vec3d> constrained_vertex_normal(nc); // surface normals
+        std::vector<int> incident_regions;
         for (size_t i = 0; i < nc; i++)
         {
             size_t cv = m_constrained_vertices[relevant_constrained_vertices[i]];
-            LosTopos::Vec2i l(-1, -1);
-            for (std::size_t triangle_index : mesh().m_vertex_to_triangle_map[cv])
-            {
-                if (m_st->triangle_is_all_solid(triangle_index))
-                {
-                    continue;
-                }
+            Vec2i incident_regions = getManifoldVertexRegionPair(cv);
+            constrained_vertex_region_pair[i] = incident_regions;
 
-                l = mesh().get_triangle_label(triangle_index); // grab any triangle on the vertex,
-                                                               // because it's manifold.
-            }
-            // this vertex can't be incident to no unconstrained triangle.
-            assert(l[0] >= 0 && l[1] >= 0);
-            constrained_vertex_region_pair[i] =
-              (l[0] < l[1] ? Vec2i(l[0], l[1]) : Vec2i(l[1], l[0]));
-
-            Vec3d normal(0, 0, 0);
-            for (size_t j = 0; j < mesh().m_vertex_to_triangle_map[cv].size(); j++)
-            {
-                LosTopos::Vec3st t = mesh().get_triangle(mesh().m_vertex_to_triangle_map[cv][j]);
-                if (m_st->vertex_is_any_solid(t[0]) && m_st->vertex_is_any_solid(t[1])
-                    && m_st->vertex_is_any_solid(t[2]))
-                    continue;
-                LosTopos::Vec2i ll =
-                  mesh().get_triangle_label(mesh().m_vertex_to_triangle_map[cv][j]);
-                assert(
-                  (l[0] == ll[0] && l[1] == ll[1])
-                  || (l[0] == ll[1]
-                      && l[1] == ll[0])); // assume constrained vertices are all manifold for now
-                Vec3d x0 = pos(t[0]);
-                Vec3d x1 = pos(t[1]);
-                Vec3d x2 = pos(t[2]);
-                if (!(m_st->vertex_is_any_solid(t[0]) && m_st->vertex_is_any_solid(t[1])
-                      && m_st->vertex_is_any_solid(t[2])))
-                    normal += (x1 - x0).cross(x2 - x0) * (l[0] == ll[0] ? 1 : -1);
-            }
-            assert(normal.norm() != 0);
-            constrained_vertex_normal[i] = normal.normalized();
+            constrained_vertex_normal[i] = getManifoldVertexNormal(cv);
         }
 
         MatXd A = MatXd::Zero(
@@ -898,47 +865,23 @@ VS3D::step(double dt)
             // Biot-Savart for constrained vertex i
             size_t i = m_constrained_vertices[relevant_constrained_vertices[ii]];
 
-#warning What is this quantity for?
-            Vec3d v(0, 0, 0);
             Vec3d x = pos(i);
 
             for (size_t jj = 0; jj < nc; jj++)
             {
                 size_t j = m_constrained_vertices[relevant_constrained_vertices[jj]];
-                for (size_t k = 0; k < mesh().m_vertex_to_triangle_map[j].size(); k++)
+                for (size_t triangle_index : mesh().m_vertex_to_triangle_map[j])
                 {
-                    LosTopos::Vec3st t = mesh().get_triangle(mesh().m_vertex_to_triangle_map[j][k]);
-                    if (m_st->vertex_is_any_solid(t[0]) && m_st->vertex_is_any_solid(t[1])
-                        && m_st->vertex_is_any_solid(t[2]))
+                    if (surfTrack()->triangle_is_all_solid(triangle_index))
                         continue; // all-solid faces don't contribute vorticity.
 
-                    LosTopos::Vec2i l =
-                      mesh().get_triangle_label(mesh().m_vertex_to_triangle_map[j][k]);
+                    LosTopos::Vec3st t = mesh().get_triangle(triangle_index);
+                    LosTopos::Vec2i l = mesh().get_triangle_label(triangle_index);
                     Vec3d xp = (pos(t[0]) + pos(t[1]) + pos(t[2])) / 3;
-
-                    Vec3d e01 = pos(t[1]) - pos(t[0]);
-                    Vec3d e12 = pos(t[2]) - pos(t[1]);
-                    Vec3d e20 = pos(t[0]) - pos(t[2]);
-
-                    Vec3d e_opposite;
-                    if (t[0] == j)
-                        e_opposite = e12;
-                    else if (t[1] == j)
-                        e_opposite = e20;
-                    else if (t[2] == j)
-                        e_opposite = e01;
-                    assert(t[0] == j || t[1] == j || t[2] == j);
-
-                    Vec3d gamma = -(e01 * (*m_Gamma)[t[2]].get(l) + e12 * (*m_Gamma)[t[0]].get(l)
-                                    + e20 * (*m_Gamma)[t[1]].get(l));
+                    Vec3d e_opposite = getVertexOppositeEdgeInTriangle(j, triangle_index);
 
                     Vec3d dx = x - xp;
-                    //                double dxn = dx.norm();
                     double dxn = sqrt(dx.squaredNorm() + m_delta * m_delta);
-
-                    v += gamma.cross(dx) / (dxn * dxn * dxn);
-                    //                v += gamma.cross(dx) / (dxn * dxn * dxn) * (1 - exp(-dxn /
-                    //                m_delta));
 
                     A(ii, jj) += (l[0] < l[1] ? 1 : -1)
                                  * (skewSymmetric(dx) * e_opposite / (dxn * dxn * dxn))
@@ -1003,6 +946,76 @@ VS3D::step(double dt)
     //    update_dbg_quantities();
 
     return (counter % 2 == 0 ? 0 : dt);
+}
+
+Vec3d
+VS3D::getTriangleSheetStrength(size_t triangle_index) const
+{
+
+    LosTopos::Vec3st triangle = mesh().get_triangle(triangle_index);
+    LosTopos::Vec2i incident_regions = mesh().get_triangle_label(triangle_index);
+    Vec3d e01 = pos(triangle[1]) - pos(triangle[0]);
+    Vec3d e12 = pos(triangle[2]) - pos(triangle[1]);
+    Vec3d e20 = pos(triangle[0]) - pos(triangle[2]);
+
+    return -(e01 * (*m_Gamma)[triangle[2]].get(incident_regions)
+             + e12 * (*m_Gamma)[triangle[0]].get(incident_regions)
+             + e20 * (*m_Gamma)[triangle[1]].get(incident_regions));
+}
+
+Vec3d
+VS3D::getVertexOppositeEdgeInTriangle(size_t vertex_index, size_t triangle_index) const
+{
+    LosTopos::Vec3st triangle = mesh().get_triangle(triangle_index);
+    return pos(triangle[(vertex_index + 2) % 3]) - pos(triangle[(vertex_index + 1) % 3]);
+}
+
+Vec3d
+VS3D::getManifoldVertexNormal(size_t vertex_index) const
+{
+    // Since we need to ignore solid triangles we can't use the
+    // get_vertex_normal_angleweighted_by_label method from the surface tracking library.
+    Vec3d normal(0, 0, 0);
+    for (size_t triangle_index : mesh().m_vertex_to_triangle_map[vertex_index])
+    {
+        if (m_st->triangle_is_all_solid(triangle_index))
+            continue;
+        LosTopos::Vec2i region_pair = mesh().get_triangle_label(triangle_index);
+        normal +=
+          surfTrack()->get_triangle_area(triangle_index)
+          * getTriangleNormalTowardRegion(triangle_index, std::max(region_pair[0], region_pair[1]));
+    }
+    assert(normal.norm() != 0);
+    return normal.normalized();
+}
+
+Vec2i
+VS3D::getManifoldVertexRegionPair(size_t vertex_index) const
+{
+    std::vector<int> incident_regions = getVertexIncidentRegions(vertex_index);
+    // this vertex can't be incident to no unconstrained triangle and is manifold
+    assert(incident_regions.size() == 2);
+    std::sort(incident_regions.begin(), incident_regions.end());
+    return Vec2i(incident_regions[0], incident_regions[1]);
+}
+
+std::vector<int>
+VS3D::getVertexIncidentRegions(size_t vertex_index) const
+{
+    std::unordered_set<int> result;
+    LosTopos::Vec2i label;
+    for (std::size_t triangle_index : mesh().m_vertex_to_triangle_map[vertex_index])
+    {
+        if (m_st->triangle_is_all_solid(triangle_index))
+        {
+            continue;
+        }
+
+        label = mesh().get_triangle_label(triangle_index);
+        result.insert(label[0]);
+        result.insert(label[1]);
+    }
+    return std::vector<int>(result.begin(), result.end());
 }
 
 void
