@@ -13,6 +13,7 @@
 #include "VS3D.h"
 #include <boost/multi_array.hpp>
 #include <map>
+#include <random>
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -257,6 +258,48 @@ addMesh(const std::vector<Vec3d>& mesh_vertices,
     {
         faces.push_back(offset + mesh_face);
     }
+}
+
+//TODO: Is copying the distribution the best ?
+template<class RadiusDistribution, class CoordinateDistribution>
+std::enable_if_t<
+  std::is_same_v<typename RadiusDistribution::result_type,
+                 double> && std::is_same_v<typename CoordinateDistribution::result_type, double>,
+  std::vector<std::pair<Vec3d, double>>>
+getRandomNonIntersectingSpheres(RadiusDistribution radius_distribution,
+                                CoordinateDistribution coordinate_distribution,
+                                std::size_t number_spheres,
+                                std::size_t max_number_of_tries)
+{
+    std::default_random_engine engine(std::random_device{}());
+
+    std::vector<std::pair<Vec3d, double>> spheres;
+    for (std::size_t i = 0; i < number_spheres; ++i)
+    {
+        for (std::size_t j = 0; j < max_number_of_tries; ++j)
+        {
+            Vec3d center = Vec3d(coordinate_distribution(engine),
+                                 coordinate_distribution(engine),
+                                 coordinate_distribution(engine));
+            double radius = radius_distribution(engine);
+
+            double min_distance = std::numeric_limits<double>::infinity();
+            double distance;
+            for (auto& [other_center, other_radius] : spheres)
+            {
+                distance = (center - other_center).norm() - (other_radius + radius);
+                min_distance = std::min(distance, min_distance);
+            }
+
+            if (min_distance > 0.001)
+            {
+                spheres.push_back(std::pair<Vec3d, double>(center, radius));
+                break;
+            }
+        }
+    }
+
+    return spheres;
 }
 
 #warning Factorize this into one templated function
@@ -752,8 +795,17 @@ Scenes::sceneFoamInit(Sim* sim,
                       std::vector<size_t>& cv,
                       std::vector<Vec3d>& cx)
 {
-    int N = Options::intValue("mesh-size-n"); // subdiv levels
     int M = Options::intValue("mesh-size-m"); // number of bubbles
+    std::vector<std::pair<Vec3d, double>> spheres =
+      getRandomNonIntersectingSpheres(std::uniform_real_distribution(0.2, 0.5),
+                                      std::uniform_real_distribution(-1.0, 1.0),
+                                      M,
+                                      1000u);
+
+    std::cout << M << " spheres requested; " << spheres.size() << " actually spheres generated."
+              << std::endl;
+
+    int N = Options::intValue("mesh-size-n"); // subdiv levels
 
     std::vector<Vec3d> v_all;
     std::vector<Vec3i> f_all;
@@ -762,73 +814,21 @@ Scenes::sceneFoamInit(Sim* sim,
     std::vector<Vec3d> v;
     std::vector<Vec3i> f;
     std::vector<Vec2i> l;
-
-    double rmin = 0.2;
-    double rmax = 0.5;
-
-    srand(0);
-    std::vector<std::pair<Vec3d, double>> spheres;
-    for (std::size_t i = 0; i < M; ++i)
+    std::size_t sphere_interior_region = 1;
+    for (const auto& [center, radius] : spheres)
     {
-        for (std::size_t j = 0; j < 1000; ++j)
-        {
-            Vec3d c = Vec3d(2.0 * rand() / RAND_MAX - 1.0,
-                            2.0 * rand() / RAND_MAX - 1.0,
-                            2.0 * rand() / RAND_MAX - 1.0);
-            double r = rmin + (rmax - rmin) * rand() / RAND_MAX;
-            bool collision = false;
-            double min_distance = std::numeric_limits<double>::infinity();
-            for (size_t k = 0; k < spheres.size(); k++)
-            {
-                min_distance =
-                  std::min((c - spheres[k].first).norm() - (spheres[k].second + r), min_distance);
-            }
-
-            if (min_distance > 0.001)
-            {
-                spheres.push_back(std::pair<Vec3d, double>(c, r + min_distance));
-                break;
-            }
-        }
-    }
-
-    // spheres.resize(3);
-    // spheres[0].first = Vec3d(1, 0, 0);
-    // spheres[0].second = 0.5;
-    // spheres[1].first = Vec3d(-0.5, 0, -0.866025404);
-    // spheres[1].second = 0.5;
-    // spheres[2].first = Vec3d(-0.5, 0,  0.866025404);
-    // spheres[2].second = 0.5;
-
-    std::cout << M << " spheres requested; " << spheres.size() << " actually spheres generated."
-              << std::endl;
-
-    for (size_t i = 0; i < spheres.size(); i++)
-    {
-        Vec3d c = spheres[i].first;
-        double r = spheres[i].second;
-
         v.clear();
         f.clear();
         l.clear();
-        createIcoSphere(c, r, N, v, f, l, Vec2i(i + 1, 0));
-        f_all.reserve(f_all.size() + f.size());
-        for (size_t i = 0; i < f.size(); i++)
-            f_all.push_back(
-              Vec3i(f[i][0] + v_all.size(), f[i][1] + v_all.size(), f[i][2] + v_all.size()));
-        v_all.insert(v_all.end(), v.begin(), v.end());
-        l_all.insert(l_all.end(), l.begin(), l.end());
+        createIcoSphere(center, radius, N, v, f, l, Vec2i(sphere_interior_region, 0));
+        addMesh(v, f, l, v_all, f_all, l_all);
+
+        ++sphere_interior_region;
     }
 
-    vs.resize(v_all.size());
-    fs.resize(f_all.size());
-    ls.resize(l_all.size());
-    for (size_t i = 0; i < v_all.size(); i++)
-        vs[i] = LosTopos::Vec3d(v_all[i][0], v_all[i][1], v_all[i][2]);
-    for (size_t i = 0; i < f_all.size(); i++)
-        fs[i] = LosTopos::Vec3st(f_all[i][0], f_all[i][1], f_all[i][2]);
-    for (size_t i = 0; i < l_all.size(); i++)
-        ls[i] = LosTopos::Vec2i(l_all[i][0], l_all[i][1]);
+    convertToLosTopos(v_all, vs);
+    convertToLosTopos(f_all, fs);
+    convertToLosTopos(l_all, ls);
 
     return new VS3D(vs, fs, ls, cv, cx);
 }
@@ -1754,6 +1754,28 @@ Scenes::sceneBubbleLattice(Sim* sim,
 
     return new VS3D(vs, fs, ls, cv, cx);
 }
+
+//void sceneFlyingBubble(Sim* sim
+//                       std::vector<LosTopos::Vec3d>& vs,
+//                       std::vector<LosTopos::Vec3st>& fs,
+//                       std::vector<LosTopos::Vec2i>& ls,
+//                       std::vector<size_t>& cv,
+//                       std::vector<Vec3d>& cx)
+//{
+//    std::vector<std::pair<Vec3d, double>> spheres = getRandomNonIntersectingSpheres(
+//            std::uniform_real_distribution(0.2, 0.5),
+//            std::uniform_real_distribution(-1.0, 1.0),
+//            Options::intValue("mesh-size-m"),
+//            1000u);
+//
+//    std::vector<Vec3d> spheres_velocity;
+//    spheres_velocity.reserve(spheres.size());
+//    for (std::size_t velocity_index = 0; velocity_index < spheres.size(); ++velocity_index)
+//    {
+//        spheres_velocity.push_back(Vec3d::Random())
+//    }
+//
+//}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
