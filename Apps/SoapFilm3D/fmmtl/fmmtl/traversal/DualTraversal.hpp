@@ -28,7 +28,7 @@ struct traversal_impl<depth_first,T> {
   void pop() { return q.pop(); }
   void push(const T& v) { return q.push(v); }
   template <class... Args>
-  void emplace(Args&&... args) {
+  decltype(auto) emplace(Args&&... args) {
     return q.emplace(std::forward<Args>(args)...);
   }
 };
@@ -42,7 +42,7 @@ struct traversal_impl<breadth_first,T> {
   void pop() { return q.pop(); }
   void push(const T& v) { return q.push(v); }
   template <class... Args>
-  void emplace(Args&&... args) {
+  decltype(auto) emplace(Args&&... args) {
     return q.emplace(std::forward<Args>(args)...);
   }
 };
