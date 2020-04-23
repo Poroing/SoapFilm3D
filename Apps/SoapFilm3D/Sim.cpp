@@ -89,6 +89,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
                               0); // 0 means synching with simulation frame rate (equivalent to 1).
     Options::addDoubleOption("remeshing-resolution", 0.1);
     Options::addIntegerOption("remeshing-iterations", 1);
+    Options::addIntegerOption("initial-remeshing-iterations", 1);
 
     Options::addDoubleOption("lostopos-collision-epsilon-fraction",
                              1e-4); // lostopos collision epsilon (fraction of mean edge length)
@@ -238,6 +239,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
         std::cout << "nv = " << vertices.size() << " nf = " << faces.size() << std::endl;
     }
 
+
     // prepare to start the simulation
     m_time = 0;
     m_dt = Options::doubleValue("time-step");
@@ -250,6 +252,8 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     // PR rendering
     if (!headless)
         m_prrenderer = new PRRenderer(m_vs);
+
+    m_vs->improveMesh(Options::intValue("initial-remeshing-iterations"));
 
     return true;
 }

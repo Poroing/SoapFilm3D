@@ -93,6 +93,8 @@ public:
     double delta() const { return m_delta; }
     
     int nregion() const { return m_nregion; }
+
+    std::vector<size_t> getNumberVerticesIncidentToRegions() const;
     
     bool isVertexConstrained( size_t vert ) const;
     /**
