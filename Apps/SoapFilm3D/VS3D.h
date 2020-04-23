@@ -93,8 +93,12 @@ public:
     
     int nregion() const { return m_nregion; }
     
-#warning Should be const
-    bool isVertexConstrained( size_t vert );
+    bool isVertexConstrained( size_t vert ) const;
+    MatXd getCirculationToProjectedVelocityMatrix(
+            const std::vector<size_t>& vertices_indices,
+            const std::vector<Vec3d>& projected_velocity_direction) const;
+    MatXd getCirculationToVelocityMatrix(const std::vector<size_t>& vertices_indices) const;
+    Vec3d getTriangleCenter(size_t triangle_index) const;
     Vec3d getTriangleSheetStrength(size_t triangle_index) const;
     Vec3d getVertexOppositeEdgeInTriangle(size_t vertex_index, size_t triangle_index) const;
     /**
