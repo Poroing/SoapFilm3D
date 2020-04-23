@@ -664,52 +664,22 @@ VS3D::step(double dt)
 #warning There should be a way to factorize this with the BiotSavart function.
     if (nc > 0)
     {
-        std::vector<Vec2i> constrained_vertex_region_pair(
-          nc); // one region pair for each constrained vertex
         std::vector<Vec3d> constrained_vertex_normal(nc); // surface normals
         std::vector<size_t> relevant_constrained_vertices_global_indices(nc);
-        std::vector<int> incident_regions;
+        std::vector<double> target_normal_velocity;
         for (size_t i = 0; i < nc; i++)
         {
             size_t cv = m_constrained_vertices[relevant_constrained_vertices[i]];
-
-            Vec2i incident_regions = getManifoldVertexRegionPair(cv);
-            constrained_vertex_region_pair[i] = incident_regions;
-
             relevant_constrained_vertices_global_indices[i] = cv;
-
             constrained_vertex_normal[i] = getManifoldVertexNormal(cv);
+            target_normal_velocity[i] =
+              (m_constrained_positions[relevant_constrained_vertices[i]] - pos(i))
+                .dot(constrained_vertex_normal[i]) / dt;
         }
-
-        MatXd A = dt * getCirculationToProjectedVelocityMatrix(
+        projectVelocity(
                 relevant_constrained_vertices_global_indices,
-                constrained_vertex_normal);
-
-        VecXd rhs = VecXd::Zero(nc); // rhs = the additional normal displacements needed on
-                                     // constrained vertices to correct the current displacement to
-                                     // satisfiy the constraints (in the normal direction)
-        for (size_t ii = 0; ii < nc; ii++)
-        {
-            size_t i = m_constrained_vertices[relevant_constrained_vertices[ii]];
-            rhs(ii) = (m_constrained_positions[relevant_constrained_vertices[ii]]
-                       - vc(m_st->pm_newpositions[i]))
-                        .dot(constrained_vertex_normal[ii]);
-        }
-
-        //    VecXd result = A.partialPivLu().solve(rhs); // the solution is the additional
-        //    circulation needed to be added to the constrained vertices
-        double lambda = (m_st->m_min_edge_length + m_st->m_max_edge_length) / 2 * 0.1;
-        VecXd result = (A.transpose() * A + lambda * lambda * MatXd::Identity(nc, nc))
-                         .partialPivLu()
-                         .solve(A.transpose() * rhs); // regularized solve to avoid blowing up in
-                                                      // presence of near-dependent constraints
-
-        for (size_t ii = 0; ii < nc; ii++)
-        {
-            size_t i = m_constrained_vertices[relevant_constrained_vertices[ii]];
-            Vec2i rp = constrained_vertex_region_pair[ii];
-            (*m_Gamma)[i].set(rp, (*m_Gamma)[i].get(rp) + result[ii]);
-        }
+                constrained_vertex_normal,
+                target_normal_velocity);
     }
 
 #warning There might be a way to reuse the computation of the previous BiotSavart
@@ -742,9 +712,41 @@ VS3D::step(double dt)
     return (counter % 2 == 0 ? 0 : dt);
 }
 
-MatXd VS3D::getCirculationToProjectedVelocityMatrix(
-        const std::vector<size_t>& vertices_indices,
-        const std::vector<Vec3d>& projected_velocity_direction) const
+void
+VS3D::projectVelocity(const std::vector<size_t> vertices_indices,
+                      const std::vector<Vec3d> direction,
+                      const std::vector<double> velocity_along_direction)
+{
+    assert(vertices_indices.size() == direction.size());
+    assert(vertices_indices.size() == velocity_along_direction.size());
+    MatXd A = getCirculationToProjectedVelocityMatrix(vertices_indices, direction);
+
+    VecXd rhs = VecXd::Zero(vertices_indices.size());
+    for (size_t i = 0; i < velocity_along_direction.size(); ++i)
+    {
+        rhs(i) = velocity_along_direction[i];
+    }
+
+    double lambda = (m_st->m_min_edge_length + m_st->m_max_edge_length) / 2 * 0.1;
+    VecXd result =
+      (A.transpose() * A
+       + lambda * lambda * MatXd::Identity(vertices_indices.size(), vertices_indices.size()))
+        .partialPivLu()
+        .solve(A.transpose() * rhs); // regularized solve to avoid blowing up in
+                                     // presence of near-dependent constraints
+
+    for (size_t i = 0; i < vertices_indices.size(); ++i)
+    {
+        size_t vertex_index = vertices_indices[i];
+        Vec2i incident_regions = getManifoldVertexRegionPair(vertex_index);
+        (*m_Gamma)[i].set(incident_regions, result[i]);
+    }
+}
+
+MatXd
+VS3D::getCirculationToProjectedVelocityMatrix(
+  const std::vector<size_t>& vertices_indices,
+  const std::vector<Vec3d>& projected_velocity_direction) const
 {
     assert(projected_velocity_direction.size() == vertices_indices.size());
     MatXd projection = MatXd::Zero(vertices_indices.size(), vertices_indices.size() * 3u);
@@ -755,7 +757,8 @@ MatXd VS3D::getCirculationToProjectedVelocityMatrix(
     return projection * getCirculationToVelocityMatrix(vertices_indices);
 }
 
-MatXd VS3D::getCirculationToVelocityMatrix(const std::vector<size_t>& vertices_indices) const
+MatXd
+VS3D::getCirculationToVelocityMatrix(const std::vector<size_t>& vertices_indices) const
 {
     MatXd A = MatXd::Zero(vertices_indices.size() * 3u, vertices_indices.size());
 
@@ -779,8 +782,8 @@ MatXd VS3D::getCirculationToVelocityMatrix(const std::vector<size_t>& vertices_i
 
                 Vec3d dx = x - xp;
                 double dxn = sqrt(dx.squaredNorm() + m_delta * m_delta);
-                Vec3d triangle_contribution = (l[0] < l[1] ? 1 : -1)
-                             * (skewSymmetric(dx) * e_opposite / (dxn * dxn * dxn));
+                Vec3d triangle_contribution =
+                  (l[0] < l[1] ? 1 : -1) * (skewSymmetric(dx) * e_opposite / (dxn * dxn * dxn));
 
                 A.col(j).segment<3u>(3 * i) += triangle_contribution;
             }
@@ -790,7 +793,8 @@ MatXd VS3D::getCirculationToVelocityMatrix(const std::vector<size_t>& vertices_i
     return A;
 }
 
-Vec3d VS3D::getTriangleCenter(size_t triangle_index) const
+Vec3d
+VS3D::getTriangleCenter(size_t triangle_index) const
 {
     LosTopos::Vec3st t = mesh().get_triangle(triangle_index);
     return (pos(t[0]) + pos(t[1]) + pos(t[2])) / 3;

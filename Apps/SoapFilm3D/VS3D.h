@@ -94,6 +94,15 @@ public:
     int nregion() const { return m_nregion; }
     
     bool isVertexConstrained( size_t vert ) const;
+    /**
+     *  Modifies the circulations such that the velocity resulting from the Biot-Savart law
+     *  has the given value value along the given direction for the given vertices. All given
+     *  vertices must be manifold.
+     */
+    void projectVelocity(
+            const std::vector<size_t> vertices_indices,
+            const std::vector<Vec3d> direction,
+            const std::vector<double> velocity_along_direction);
     MatXd getCirculationToProjectedVelocityMatrix(
             const std::vector<size_t>& vertices_indices,
             const std::vector<Vec3d>& projected_velocity_direction) const;
