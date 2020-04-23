@@ -1,3 +1,5 @@
+#!/usr/bin/python3.8
+
 import pathlib
 import subprocess
 import argparse
@@ -6,17 +8,6 @@ import csv
 import itertools
 
 class SoapFilmSimulationConfigFile(object):
-
-    TRANSLATION = {
-            'subdivisions' : 'mesh-size-n',
-            'size' : 'mesh-size-m'
-            }
-
-    @staticmethod
-    def getTranslation(key):
-        return SoapFilmSimulationConfigFile.TRANSLATION.get(
-                key,
-                key)
 
     @staticmethod
     def getConfigKeyFromVariableName(variable_name):
@@ -36,6 +27,9 @@ class SoapFilmSimulationConfigFile(object):
     def __init__(self, **kwargs):
         self.config = { self.getConfigKeyFromVariableName(k) : v for k, v in kwargs.items() }
 
+    def update(self, options):
+        self.config.update(options)
+
     def __setattr__(self, name, value):
         if name == 'config':
             object.__setattr__(self, name, value)
@@ -46,10 +40,10 @@ class SoapFilmSimulationConfigFile(object):
         return self.__getitem__(self.getConfigKeyFromVariableName(name))
 
     def __getitem__(self, key):
-        return self.config[SoapFilmSimulationConfigFile.getTranslation(key)]
+        return self.config[key]
 
     def __setitem__(self, key, value):
-        self.config[SoapFilmSimulationConfigFile.getTranslation(key)] = value
+        self.config[key] = value
 
     def writeToFile(self, filename):
         with open(filename, mode='w', newline='') as config_file:
@@ -118,6 +112,47 @@ class SoapFilmSimulationResult(object):
             stdout = (self.output_directory / 'stdout').read_text()
         self.stdout = stdout
 
+class SimulationParameterProductIterator(object):
+
+    def __init__(self, options):
+        self.options = options
+        self.iterator = itertools.product(
+                    *[ [ (key, value) for value in values ] for key, values in options.items() if
+                        len(values) > 0]
+                )
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        next_options = next(self.iterator)
+        path = pathlib.Path('')
+        for (key, value) in next_options:
+            if len(self.options[key]) > 1:
+                path = path / (key.capitalize() + str(value).capitalize())
+        return path, next_options
+
+
+class SimulationParameterProduct(object):
+
+    def __init__(self):
+        self.options = {}
+
+    def addOption(self, key, value):
+        self.options.setdefault(key, []).append(value)
+
+    def addOptions(self, key, values):
+        self.options.setdefault(key, []).extend(values)
+
+    def __iter__(self):
+        return SimulationParameterProductIterator(self.options)
+
+    def __repr__(self):
+        return repr(self.options)
+
+    def __str__(self):
+        return str(self.options)
+
 if  __name__ == '__main__':
 
 
@@ -128,13 +163,16 @@ if  __name__ == '__main__':
             '-m', '--method', action='append', choices=['fmmtl', 'naive'], default=[])
     argument_parser.add_argument('-s', '--save-mesh', action='store_true')
     argument_parser.add_argument('-T', '--save-mesh-period', type=int, default=1)
-    argument_parser.add_argument('-o', '--output-directory', default='BubbleLattice')
     argument_parser.add_argument('-c', '--config')
     argument_parser.add_argument('-r', '--resolution', action='append', type=float, default=[])
     argument_parser.add_argument('-S', '--size', action='append', type=int, default=[])
     argument_parser.add_argument('-t', '--simulation-time', type=float, default=4.0)
-    argument_parser.add_argument('--scene', default='bubblelattice')
-    argument_parser.add_argument('--subdivisions', type=int, default=2)
+    argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
+    argument_parser.add_argument('--no-run', action='store_true',
+        help='The simulaton is not run, only the configuration file is saved.')
+    argument_parser.add_argument('--scene', action='append', default=[])
+    argument_parser.add_argument('--subdivisions', action='append', type=int, default=[])
+    argument_parser.add_argument('output_directory')
     args = argument_parser.parse_args()
 
     if args.method == []:
@@ -145,26 +183,35 @@ if  __name__ == '__main__':
     else:
         config = SoapFilmSimulationConfigFile()
 
-    config.scene = args.scene
-    config.mesh_size_n = args.subdivisions
     config.output_mesh = args.save_mesh
     config.output_mesh_every_n_frames=args.save_mesh_period
     config.simulation_time = args.simulation_time
 
-    for size, resolution, method in itertools.product(args.size, args.resolution, args.method):
-        print(f'Starting experiment of size {size}, resolution {resolution} and method {method}.')
-        experiment_path = (
-                output_directory
-                / f'Resolution{resolution}'
-                / f'Size{size}'
-                / method.capitalize()
-                )
+    simulation_parameter_product = SimulationParameterProduct()
+    for sim_option in args.sim_option:
+        key, value = sim_option.split('=')
+        simulation_parameter_product.addOption(key, value)
 
-        config.mesh_size_m = size
-        config.remeshing_resolution = resolution
-        config.fmmtl = (method == 'fmmtl')
+    simulation_parameter_product.addOptions('remeshing-resolution', args.resolution)
+    simulation_parameter_product.addOptions('mesh-size-m', args.size)
+    simulation_parameter_product.addOptions('mesh-size-n', args.subdivisions)
+    simulation_parameter_product.addOptions('scene', args.scene)
+    if 'fmmtl' in args.method:
+        simulation_parameter_product.addOption('fmmtl', True)
+    if 'naive' in args.method:
+        simulation_parameter_product.addOption('fmmtl', False)
+
+    print(simulation_parameter_product)
+
+    print(args)
+    for path, options in simulation_parameter_product:
+        print(f'Starting simulation with options {options}.')
+        experiment_path = pathlib.Path(args.output_directory) / path
+
+        config.update(options)
 
         simulation = SoapFilmSimulation(experiment_path, delete_existing=True, config=config)
-        stdout = simulation.run()
-        (experiment_path / 'stdout').write_text(stdout)
+        if not args.no_run:
+            stdout = simulation.run()
+            (experiment_path / 'stdout').write_text(stdout)
 
