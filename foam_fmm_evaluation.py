@@ -60,7 +60,14 @@ class SoapFilmSimulation(object):
 
     config_file_name = 'config.txt'
 
-    def __init__(self, output_directory, delete_existing=False, config=None, headless=True):
+    def __init__(self,
+            output_directory,
+            delete_existing=False,
+            config=None,
+            headless=True,
+            capture_stdout=True
+            ):
+        self.capture_stdout = capture_stdout
         self.headless = headless
 
         if config is None:
@@ -88,7 +95,7 @@ class SoapFilmSimulation(object):
     def run(self):
         completed_process = subprocess.run(
                 ['./SoapFilm3D', self.config_file.as_posix(), 'headless' if self.headless else 'output'],
-                capture_output=True,
+                capture_output=self.capture_stdout,
                 text=True)
 
         if completed_process.returncode != 0:
@@ -170,6 +177,7 @@ if  __name__ == '__main__':
     argument_parser.add_argument('-S', '--size', action='append', type=int, default=[])
     argument_parser.add_argument('-t', '--simulation-time', type=float, default=4.0)
     argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
+    argument_parser.add_argument('--no-save-stdout' , action='store_true')
     argument_parser.add_argument('--no-run', action='store_true',
         help='The simulaton is not run, only the configuration file is saved.')
     argument_parser.add_argument('--no-headless', action='store_true')
@@ -216,9 +224,13 @@ if  __name__ == '__main__':
         simulation = SoapFilmSimulation(
                 experiment_path,
                 delete_existing=True,
+                capture_stdout=not args.no_save_stdout,
                 config=config,
                 headless=not args.no_headless)
-        if not args.no_run:
-            stdout = simulation.run()
+        if args.no_run:
+            continue
+
+        stdout = simulation.run()
+        if not args.no_save_stdout:
             (experiment_path / 'stdout').write_text(stdout)
 
