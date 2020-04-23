@@ -64,6 +64,7 @@ public:
     double getBoundingBoxVolume() const;
     
     double step(double dt);
+    void improveMesh(size_t number_iteration);
     
     void update_dbg_quantities();
     

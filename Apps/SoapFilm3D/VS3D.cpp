@@ -260,6 +260,8 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     m_forces.push_back(new VertexAreaForce(this, m_sim_options.sigma));
     // initialize constraint stepper
     m_constraint_stepper = new LinearizedImplicitEuler();
+
+    improveMesh(Options::intValue("initial-remeshing-iterations"));
 }
 
 VS3D::~VS3D()
@@ -322,16 +324,7 @@ VS3D::step(double dt)
     if (counter % 2 == 0)
     {
         // mesh improvement
-        for (int i = 0; i < Options::intValue("remeshing-iterations"); i++)
-        {
-            m_st->topology_changes();
-            m_st->improve_mesh();
-        }
-
-        // defrag the mesh in the end, to ensure the next step starts with a clean mesh
-        m_st->defrag_mesh_from_scratch(m_constrained_vertices);
-        for (size_t i = 0; i < m_constrained_vertices.size(); i++)
-            assert(m_constrained_vertices[i] < mesh().nv());
+        improveMesh(Options::intValue("remeshing-iterations"));
     }
     else
     {
@@ -710,6 +703,21 @@ VS3D::step(double dt)
     //    update_dbg_quantities();
 
     return (counter % 2 == 0 ? 0 : dt);
+}
+
+void VS3D::improveMesh(size_t number_iteration)
+{
+    for (int i = 0; i < number_iteration; i++)
+    {
+        m_st->topology_changes();
+        m_st->improve_mesh();
+    }
+
+    // defrag the mesh in the end, to ensure the next step starts with a clean mesh
+    m_st->defrag_mesh_from_scratch(m_constrained_vertices);
+    for (size_t i = 0; i < m_constrained_vertices.size(); i++)
+        assert(m_constrained_vertices[i] < mesh().nv());
+
 }
 
 void

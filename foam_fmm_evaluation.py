@@ -60,7 +60,9 @@ class SoapFilmSimulation(object):
 
     config_file_name = 'config.txt'
 
-    def __init__(self, output_directory, delete_existing=False, config=None):
+    def __init__(self, output_directory, delete_existing=False, config=None, headless=True):
+        self.headless = headless
+
         if config is None:
             config = SoapFilmSimulationConfigFile()
         self.config = config
@@ -85,7 +87,7 @@ class SoapFilmSimulation(object):
 
     def run(self):
         completed_process = subprocess.run(
-                ['./SoapFilm3D', self.config_file.as_posix(), 'headless'],
+                ['./SoapFilm3D', self.config_file.as_posix(), 'headless' if self.headless else 'output'],
                 capture_output=True,
                 text=True)
 
@@ -170,6 +172,7 @@ if  __name__ == '__main__':
     argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
     argument_parser.add_argument('--no-run', action='store_true',
         help='The simulaton is not run, only the configuration file is saved.')
+    argument_parser.add_argument('--no-headless', action='store_true')
     argument_parser.add_argument('--scene', action='append', default=[])
     argument_parser.add_argument('--subdivisions', action='append', type=int, default=[])
     argument_parser.add_argument('output_directory')
@@ -210,7 +213,11 @@ if  __name__ == '__main__':
 
         config.update(options)
 
-        simulation = SoapFilmSimulation(experiment_path, delete_existing=True, config=config)
+        simulation = SoapFilmSimulation(
+                experiment_path,
+                delete_existing=True,
+                config=config,
+                headless=not args.no_headless)
         if not args.no_run:
             stdout = simulation.run()
             (experiment_path / 'stdout').write_text(stdout)
