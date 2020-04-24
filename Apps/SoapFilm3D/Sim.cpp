@@ -253,8 +253,6 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     if (!headless)
         m_prrenderer = new PRRenderer(m_vs);
 
-    m_vs->improveMesh(Options::intValue("initial-remeshing-iterations"));
-
     return true;
 }
 

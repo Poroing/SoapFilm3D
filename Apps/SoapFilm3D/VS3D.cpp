@@ -261,7 +261,7 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     // initialize constraint stepper
     m_constraint_stepper = new LinearizedImplicitEuler();
 
-    //improveMesh(Options::intValue("initial-remeshing-iterations"));
+    improveMesh(Options::intValue("initial-remeshing-iterations"));
 }
 
 VS3D::~VS3D()
@@ -282,7 +282,7 @@ std::vector<size_t> VS3D::getNumberVerticesIncidentToRegions() const
     {
         for (std::size_t incident_region : getVertexIncidentRegions(vertex_index))
         {
-            ++number_vertices_incident[vertex_index];
+            ++number_vertices_incident[incident_region];
         }
     }
     return number_vertices_incident;
