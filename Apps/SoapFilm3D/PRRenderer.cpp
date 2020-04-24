@@ -353,7 +353,7 @@ bool PRRenderer::load_cube_map_side(GLuint tex, GLenum side, const std::string &
     // copy image data into 'target' side of cube map
     glBindTexture (GL_TEXTURE_CUBE_MAP, tex);
     glTexImage2D(side, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
-    delete image_data;
+    delete[] image_data;
     
     return true;
 }
