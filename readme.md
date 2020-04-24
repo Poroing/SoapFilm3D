@@ -52,6 +52,55 @@ Since FMMTL is not supported on Windows, running can be slower than expected.
 
 Please run the code using the project folder that containing everything (assets, code, etc.) as the working directory. 
 
+## Simulation Options
+
+| Key                                       | Default                 |
+| ---                                       | -------                 |
+| scene                                     | "T1"                    |
+| load-dir                                  | ""                      |
+| load-increment                            | 1                       |
+| time-step                                 | 0.01                    |
+| simulation-time                           | 1.0                     |
+| implicit-integration                      | 0                       |
+| pbd-implicit                              | 0                       |
+| RK4-velocity-integration                  | 0                       |
+| smoothing-coef                            | 0.0                     |
+| damping-coef                              | 1.0                     |
+| sigma                                     | 1.0                     |
+| gravity                                   | 0.0                     |
+| fmmtl                                     | 1                       |
+| looped                                    | 1                       |
+| radius                                    | 5e-5                    |
+| density                                   | 1.32e3                  |
+| stretching                                | 5000                    |
+| bending                                   | 250                     |
+| output-dir                                | generated based on time |
+| output-png                                | 1                       |
+| output-png-every-n-frames                 | 0                       |
+| output-mesh                               | 0                       |
+| output-mesh-every-n-frames                | 0                       |
+| output-obj                                | 0                       |
+| output-obj-every-n-frames                 | 0                       |
+| remeshing-resolutions                     | 0.1                     |
+| remeshing-iterations                      | 1                       |
+| initial-remeshing-iterations              | 1                       |
+| lostopos-collision-epsilon-fraction       | 1e-4                    |
+| lostopos-merge-proximity-epsilon-fraction | 0.02                    |
+| lostopos-perform-smoothing                | 0                       |
+| lostopos-max-volume-change-fraction       | 1e-4                    |
+| lostopos-min-triangle-angle               | 3.0                     |
+| lostomos-max-triangle-angle               | 177.0                   |
+| lostopos-large-triangle-angle-to-split    | 160                     |
+| lostopos-min-triangle-area-fraction       | 0.02                    |
+| lostopos-t1-transisition-enabled          | 1                       |
+| lostopos-smooth-subdivision               | 0                       |
+| lostopos-allow-non-manifold               | 1                       |
+| lostopos-allow-topology-changes           | 1                       |
+| mesh-size-n                               | 2                       |
+| mesh-size-m                               | 2                       |
+| foam-burst-interval                       | 20.0                    |
+| foam-burst-start                          | 10.0                    |
+
 ## Keybindings
 
 | Key            | Effect                                                                                        |
