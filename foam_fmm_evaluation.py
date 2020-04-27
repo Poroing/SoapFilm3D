@@ -175,7 +175,7 @@ if  __name__ == '__main__':
     argument_parser.add_argument('-c', '--config')
     argument_parser.add_argument('-r', '--resolution', action='append', type=float, default=[])
     argument_parser.add_argument('-S', '--size', action='append', type=int, default=[])
-    argument_parser.add_argument('-t', '--simulation-time', type=float, default=4.0)
+    argument_parser.add_argument('-t', '--simulation-time', type=float)
     argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
     argument_parser.add_argument('--no-save-stdout' , action='store_true')
     argument_parser.add_argument('--no-run', action='store_true',
@@ -207,14 +207,12 @@ if  __name__ == '__main__':
     simulation_parameter_product.addOptions('mesh-size-m', args.size)
     simulation_parameter_product.addOptions('mesh-size-n', args.subdivisions)
     simulation_parameter_product.addOptions('scene', args.scene)
+    simulation_parameter_product.addOption('simulation-time', args.simulation_time)
     if 'fmmtl' in args.method:
         simulation_parameter_product.addOption('fmmtl', True)
     if 'naive' in args.method:
         simulation_parameter_product.addOption('fmmtl', False)
 
-    print(simulation_parameter_product)
-
-    print(args)
     for path, options in simulation_parameter_product:
         print(f'Starting simulation with options {options}.')
         experiment_path = pathlib.Path(args.output_directory) / path
@@ -230,7 +228,11 @@ if  __name__ == '__main__':
         if args.no_run:
             continue
 
-        stdout = simulation.run()
+        try:
+            stdout = simulation.run()
+        except RuntimeError:
+            (experiment_path / 'error').touch()
+
         if not args.no_save_stdout:
             (experiment_path / 'stdout').write_text(stdout)
 
