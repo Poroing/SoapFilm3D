@@ -99,7 +99,11 @@ class SoapFilmSimulation(object):
 
     def run(self):
         completed_process = subprocess.run(
-                ['./SoapFilm3D', self.config_file.as_posix(), 'headless' if self.headless else 'output'],
+                [
+                    './SoapFilm3D',
+                    self.config_file.as_posix(),
+                    'headless' if self.headless else 'output'
+                ],
                 capture_output=self.capture_stdout,
                 text=True,
                 timeout=self.timeout)
@@ -253,6 +257,8 @@ if  __name__ == '__main__':
             stdout = simulation.run()
         except RuntimeError:
             (experiment_path / 'error').touch()
+        except subprocess.TimeoutExpired as timeout_expired:
+            stdout = timeout_expired.stdout.decode()
 
         if not args.no_save_stdout:
             (experiment_path / 'stdout').write_text(stdout)
