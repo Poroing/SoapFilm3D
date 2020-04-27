@@ -30,6 +30,9 @@ class SoapFilmSimulationConfigFile(object):
     def update(self, options):
         self.config.update(options)
 
+    def get(self, key, default):
+        return self.config.get(key, default)
+
     def __setattr__(self, name, value):
         if name == 'config':
             object.__setattr__(self, name, value)
