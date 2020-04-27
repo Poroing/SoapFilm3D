@@ -65,10 +65,12 @@ class SoapFilmSimulation(object):
             delete_existing=False,
             config=None,
             headless=True,
-            capture_stdout=True
+            capture_stdout=True,
+            timeout=None
             ):
         self.capture_stdout = capture_stdout
         self.headless = headless
+        self.timeout = timeout
 
         if config is None:
             config = SoapFilmSimulationConfigFile()
@@ -96,7 +98,8 @@ class SoapFilmSimulation(object):
         completed_process = subprocess.run(
                 ['./SoapFilm3D', self.config_file.as_posix(), 'headless' if self.headless else 'output'],
                 capture_output=self.capture_stdout,
-                text=True)
+                text=True,
+                timeout=self.timeout)
 
         if completed_process.returncode != 0:
             print(completed_process.stderr)
@@ -175,7 +178,7 @@ if  __name__ == '__main__':
     argument_parser.add_argument('-c', '--config')
     argument_parser.add_argument('-r', '--resolution', action='append', type=float, default=[])
     argument_parser.add_argument('-S', '--size', action='append', type=int, default=[])
-    argument_parser.add_argument('-t', '--simulation-time', type=float)
+    argument_parser.add_argument('-t', '--simulation-time', type=float, default=4.0)
     argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
     argument_parser.add_argument('--no-save-stdout' , action='store_true')
     argument_parser.add_argument('--no-run', action='store_true',
@@ -183,8 +186,18 @@ if  __name__ == '__main__':
     argument_parser.add_argument('--no-headless', action='store_true')
     argument_parser.add_argument('--scene', action='append', default=[])
     argument_parser.add_argument('--subdivisions', action='append', type=int, default=[])
+    argument_parser.add_argument('--load',
+        help='Load simulations produced with this program. Implies --scene load --no-headless'
+            ' --no-save-stdout. The options must be specified in the same order for this to work' 
+            ' correctly.')
+    argument_parser.add_argument('--timeout', type=float,
+            help='Stops each simulation after TIMEOUT seconds.')
     argument_parser.add_argument('output_directory')
     args = argument_parser.parse_args()
+    if args.load is not None:
+        args.scene = 'load'
+        args.no_headless = True
+        args.no_save_stdout = True
 
     if args.method == []:
         args.method = ['fmmtl']
@@ -195,7 +208,8 @@ if  __name__ == '__main__':
         config = SoapFilmSimulationConfigFile()
 
     config.output_mesh = args.save_mesh
-    config.output_mesh_every_n_frames=args.save_mesh_period
+    config.output_mesh_every_n_frames = args.save_mesh_period
+    config.load_increment = args.save_mesh_period
     config.simulation_time = args.simulation_time
 
     simulation_parameter_product = SimulationParameterProduct()
@@ -217,6 +231,8 @@ if  __name__ == '__main__':
         print(f'Starting simulation with options {options}.')
         experiment_path = pathlib.Path(args.output_directory) / path
 
+        if args.load is not None:
+            config.load_dir = pathlib.Path(args.load) / path / 'output'
         config.update(options)
 
         simulation = SoapFilmSimulation(
@@ -224,7 +240,9 @@ if  __name__ == '__main__':
                 delete_existing=True,
                 capture_stdout=not args.no_save_stdout,
                 config=config,
-                headless=not args.no_headless)
+                headless=not args.no_headless,
+                timeout=args.timeout)
+
         if args.no_run:
             continue
 
