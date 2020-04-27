@@ -260,9 +260,22 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     m_forces.push_back(new VertexAreaForce(this, m_sim_options.sigma));
     // initialize constraint stepper
     m_constraint_stepper = new LinearizedImplicitEuler();
-
-    improveMesh(Options::intValue("initial-remeshing-iterations"));
 }
+
+//VS3D::VS3D(
+//            const std::vector<LosTopos::Vec3d> & vs,
+//            const std::vector<LosTopos::Vec3st> & fs,
+//            const std::vector<LosTopos::Vec2i> & ls,
+//            const std::vector<double> & initial_velocity_magnitude,
+//            const std::vector<Vec3d> & initial_velocity_direction,
+//            const std::vector<size_t> & constrained_vertices, 
+//            const std::vector<Vec3d> & constrained_positions,
+//            const std::vector<Vec3d> & constrained_velocities,
+//            const std::vector<unsigned char> & constrained_fixed):
+//    VS3D(vs, fs, ls, constrained_vertices, constrained_positions, constrained_velocities, constrained_fixed)
+//{
+//    std::vector<size_t> 
+//}
 
 VS3D::~VS3D()
 {

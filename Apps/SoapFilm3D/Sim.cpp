@@ -237,6 +237,8 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
               this, vertices, faces, face_labels, constrained_vertices, constrained_positions);
 
         std::cout << "nv = " << vertices.size() << " nf = " << faces.size() << std::endl;
+
+        m_vs->improveMesh(Options::intValue("initial-remeshing-iterations"));
     }
 
 
