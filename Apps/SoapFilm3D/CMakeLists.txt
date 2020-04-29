@@ -34,8 +34,9 @@ if (OpenMP_CXX_FOUND)
   set (DEFAULT_LIBRARIES ${DEFAULT_LIBRARIES} OpenMP::OpenMP_CXX)
 endif()
 
+set(LIBIGL_USE_STATIC_LIBRARY OFF CACHE BOOL "Use libigl as static library" FORCE)
 find_package(LIBIGL REQUIRED)
-set (DEFAULT_LIBRARIES ${DEFAULT_LIBRARIES} igl::core)
+include_directories(${LIBIGL_INCLUDE_DIR})
 
 include_directories (${EIGEN_INCLUDE_DIR})
 
