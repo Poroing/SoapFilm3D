@@ -146,7 +146,7 @@ class SimulationParameterProductIterator(object):
     def __next__(self):
         next_options = next(self.iterator)
         path = pathlib.Path('')
-        for (key, value) in next_options:
+        for key, value in next_options:
             if len(self.options[key]) > 1:
                 path = path / (key.capitalize() + str(value).capitalize())
         return path, next_options
@@ -162,6 +162,9 @@ class SimulationParameterProduct(object):
 
     def addOptions(self, key, values):
         self.options.setdefault(key, []).extend(values)
+
+    def getRelevantConfigurationKeys(self):
+        return [ key for key in self.options if len(self.options[key]) > 1]
 
     def __iter__(self):
         return SimulationParameterProductIterator(self.options)
@@ -202,7 +205,7 @@ if  __name__ == '__main__':
     argument_parser.add_argument('output_directory')
     args = argument_parser.parse_args()
     if args.load is not None:
-        args.scene = 'load'
+        args.scene = ['load']
         args.no_headless = True
         args.no_save_stdout = True
 
