@@ -76,6 +76,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("density", 1.32e3);
     Options::addDoubleOption("stretching", 5000.0);
     Options::addDoubleOption("bending", 250.0);
+    Options::addStringOption("smoothing-type", "laplacian");
 
     Options::addStringOption("output-dir", "_");
     Options::addBooleanOption("output-png", true);

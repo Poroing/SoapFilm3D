@@ -17,6 +17,9 @@
 #include "Force.h"
 #include "SceneStepper.h"
 
+#include <boost/iterator/transform_iterator.hpp>
+#include <boost/range/iterator_range_core.hpp>
+
 class Sim;
 class Scenes;
 
@@ -29,16 +32,37 @@ class VS3D : public LosTopos::SurfTrack::SolidVerticesCallback, public LosTopos:
     friend VecXd BiotSavart_fmmtl(VS3D & vs, const VecXd & dx);
     
 public:
-    VS3D(const std::vector<LosTopos::Vec3d> & vs, const std::vector<LosTopos::Vec3st> & fs, const std::vector<LosTopos::Vec2i> & ls, const std::vector<size_t> & constrained_vertices = std::vector<size_t>(),  const std::vector<Vec3d> & constrained_positions = std::vector<Vec3d>(), const std::vector<Vec3d> & constrained_velocities = std::vector<Vec3d>(), const std::vector<unsigned char> & constrained_fixed = std::vector<unsigned char>());
+    VS3D(
+            const std::vector<LosTopos::Vec3d> & vs,
+            const std::vector<LosTopos::Vec3st> & fs,
+            const std::vector<LosTopos::Vec2i> & ls,
+            const std::vector<size_t> & constrained_vertices = std::vector<size_t>(), 
+            const std::vector<Vec3d> & constrained_positions = std::vector<Vec3d>(),
+            const std::vector<Vec3d> & constrained_velocities = std::vector<Vec3d>(),
+            const std::vector<unsigned char> & constrained_fixed = std::vector<unsigned char>());
+    VS3D(
+            const std::vector<LosTopos::Vec3d> & vs,
+            const std::vector<LosTopos::Vec3st> & fs,
+            const std::vector<LosTopos::Vec2i> & ls,
+            const std::vector<double> & initial_velocity_magnitude,
+            const std::vector<Vec3d> & initial_velocity_direction,
+            const std::vector<size_t> & constrained_vertices = std::vector<size_t>(), 
+            const std::vector<Vec3d> & constrained_positions = std::vector<Vec3d>(),
+            const std::vector<Vec3d> & constrained_velocities = std::vector<Vec3d>(),
+            const std::vector<unsigned char> & constrained_fixed = std::vector<unsigned char>());
+
     ~VS3D();
     
     class SimOptions
     {
     public:
+        enum class SmoothingType { BIHARMONIC, LAPLACIAN };
+
         bool implicit;
         bool pbd;
         bool looped;
         double smoothing_coef;
+        SmoothingType smoothing_type;
         double damping_coef;
         double sigma;
         double gravity;
@@ -47,7 +71,8 @@ public:
         double stretching;
         double bending;
 
-        SimOptions() : implicit(false), pbd(false), smoothing_coef(0), damping_coef(1), sigma(1), gravity(0)
+        SimOptions() : implicit(false), pbd(false), smoothing_coef(0), damping_coef(1), sigma(1),
+            gravity(0), smoothing_type(SmoothingType::LAPLACIAN)
         { }
     };
     
@@ -65,6 +90,30 @@ public:
     
     double step(double dt);
     void improveMesh(size_t number_iteration);
+    void smoothCirculation(double dt);
+    void biharmonicSmoothing(double dt);
+    void laplacianSmoothing(double dt);
+    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> getIncidentRegions() const;
+    size_t getEdgeOtherVertex(size_t edge_index, size_t vertex_index) const;
+    // We define this function inline to avoid writing down the complicated type that it returns
+    // (which heavely depends on the implementation). There might be a better way to do this.
+    auto getAdjacentVerticesRange(size_t vertex_index) const
+    {
+        auto get_other_edge_vertex = [this, vertex_index](size_t edge_index) {
+            return getEdgeOtherVertex(edge_index, vertex_index);
+        };
+
+        return boost::make_iterator_range(
+                boost::transform_iterator(
+                    mesh().m_vertex_to_edge_map[vertex_index].begin(),
+                    get_other_edge_vertex),
+                boost::transform_iterator(
+                    mesh().m_vertex_to_edge_map[vertex_index].end(),
+                    get_other_edge_vertex));
+    }
+
+    MatXd getIglReadyPositions() const;
+    MatXi getIglReadyTriangles() const;
     
     void update_dbg_quantities();
     
@@ -151,6 +200,10 @@ public:
 
     const GammaType & Gamma(size_t v) const { return (*m_Gamma)[v]; }
           GammaType & Gamma(size_t v)       { return (*m_Gamma)[v]; }
+    VecXd getGammas(const Vec2i& region_pair) const;
+    VecXd getGammas(size_t region_a_index, size_t region_b_index) const;
+    void setGammas(const Vec2i& region_pair, const VecXd& gammas);
+    void setGammas(size_t region_a_index, size_t region_b_index, const VecXd& gammas);
     
 protected:
     void step_explicit(double dt);

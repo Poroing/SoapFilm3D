@@ -34,6 +34,9 @@ if (OpenMP_CXX_FOUND)
   set (DEFAULT_LIBRARIES ${DEFAULT_LIBRARIES} OpenMP::OpenMP_CXX)
 endif()
 
+find_package(LIBIGL REQUIRED)
+set (DEFAULT_LIBRARIES ${DEFAULT_LIBRARIES} igl::core)
+
 include_directories (${EIGEN_INCLUDE_DIR})
 
 add_executable (SoapFilm3D ${Headers} ${Sources})

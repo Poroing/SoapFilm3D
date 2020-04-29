@@ -18,6 +18,10 @@
 #include "SpringForce.h"
 #include "VertexAreaForce.h"
 
+#include <boost/range/irange.hpp>
+#include <igl/cotmatrix.h>
+#include <igl/massmatrix.h>
+
 VecXd
 BiotSavart(VS3D& vs, const VecXd& dx);
 
@@ -39,6 +43,14 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     m_sim_options.implicit = Options::boolValue("implicit-integration");
     m_sim_options.pbd = Options::boolValue("pbd-implicit");
     m_sim_options.smoothing_coef = Options::doubleValue("smoothing-coef");
+    if (Options::strValue("smoothing-type") == "biharmonic")
+    {
+        m_sim_options.smoothing_type = SimOptions::SmoothingType::BIHARMONIC;
+    }
+    else
+    {
+        m_sim_options.smoothing_type = SimOptions::SmoothingType::LAPLACIAN;
+    }
     m_sim_options.damping_coef = Options::doubleValue("damping-coef");
     m_sim_options.sigma = Options::doubleValue("sigma");
     m_sim_options.gravity = Options::doubleValue("gravity");
@@ -262,19 +274,20 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     m_constraint_stepper = new LinearizedImplicitEuler();
 }
 
-//VS3D::VS3D(
+// VS3D::VS3D(
 //            const std::vector<LosTopos::Vec3d> & vs,
 //            const std::vector<LosTopos::Vec3st> & fs,
 //            const std::vector<LosTopos::Vec2i> & ls,
 //            const std::vector<double> & initial_velocity_magnitude,
 //            const std::vector<Vec3d> & initial_velocity_direction,
-//            const std::vector<size_t> & constrained_vertices, 
+//            const std::vector<size_t> & constrained_vertices,
 //            const std::vector<Vec3d> & constrained_positions,
 //            const std::vector<Vec3d> & constrained_velocities,
 //            const std::vector<unsigned char> & constrained_fixed):
-//    VS3D(vs, fs, ls, constrained_vertices, constrained_positions, constrained_velocities, constrained_fixed)
+//    VS3D(vs, fs, ls, constrained_vertices, constrained_positions, constrained_velocities,
+//    constrained_fixed)
 //{
-//    std::vector<size_t> 
+//    std::vector<size_t>
 //}
 
 VS3D::~VS3D()
@@ -288,7 +301,8 @@ VS3D::~VS3D()
         delete m_constraint_stepper;
 }
 
-std::vector<size_t> VS3D::getNumberVerticesIncidentToRegions() const
+std::vector<size_t>
+VS3D::getNumberVerticesIncidentToRegions() const
 {
     std::vector<size_t> number_vertices_incident(nregion(), 0);
     for (std::size_t vertex_index = 0; vertex_index < mesh().nv(); ++vertex_index)
@@ -418,64 +432,7 @@ VS3D::step(double dt)
     // damping by smoothing
     if (true)
     {
-        std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs(
-          mesh().nv());
-        for (size_t i = 0; i < mesh().nv(); i++)
-            incident_region_pairs[i].setZero(m_nregion, m_nregion);
-
-        for (size_t i = 0; i < mesh().nt(); i++)
-        {
-            LosTopos::Vec3st t = mesh().get_triangle(i);
-            LosTopos::Vec2i l = mesh().get_triangle_label(i);
-            incident_region_pairs[t[0]](l[0], l[1]) = incident_region_pairs[t[0]](l[1], l[0]) =
-              true;
-            incident_region_pairs[t[1]](l[0], l[1]) = incident_region_pairs[t[1]](l[1], l[0]) =
-              true;
-            incident_region_pairs[t[2]](l[0], l[1]) = incident_region_pairs[t[2]](l[1], l[0]) =
-              true;
-        }
-
-#warning Assuming the underlying implementation of an object.
-        std::vector<GammaType> newGamma = m_Gamma->m_data;
-        for (size_t i = 0; i < mesh().nv(); i++)
-        {
-            for (int j = 0; j < m_nregion; j++)
-            {
-                for (int k = j + 1; k < m_nregion; k++)
-                {
-                    if (incident_region_pairs[i](j, k))
-                    {
-                        double neighborhood_mean = 0;
-                        int neighborhood_counter = 0;
-#warning Need to implement an abstraction to iterate over adjacent vertices.
-                        for (size_t l = 0; l < mesh().m_vertex_to_edge_map[i].size(); l++)
-                        {
-                            LosTopos::Vec2st e = mesh().m_edges[mesh().m_vertex_to_edge_map[i][l]];
-                            size_t vother = (e[0] == i ? e[1] : e[0]);
-                            if (incident_region_pairs[vother](j, k))
-                            {
-                                neighborhood_mean += (*m_Gamma)[vother].get(j, k);
-                                neighborhood_counter++;
-                            }
-                        }
-                        if (neighborhood_counter != 0)
-                            neighborhood_mean /= neighborhood_counter;
-                        newGamma[i].set(j,
-                                        k,
-                                        (*m_Gamma)[i].get(j, k)
-                                          + (neighborhood_mean - (*m_Gamma)[i].get(j, k))
-                                              * simOptions().smoothing_coef * dt);
-                    }
-                    else
-                    {
-                        newGamma[i].set(j, k, 0);
-                    }
-                }
-            }
-        }
-
-        for (size_t i = 0; i < mesh().nv(); i++)
-            (*m_Gamma)[i] = newGamma[i];
+        smoothCirculation(dt);
     }
 
     // before enforcing constraints, first scan through the mesh to find any solid vertices not
@@ -512,8 +469,6 @@ VS3D::step(double dt)
                 bool s0 = surfTrack()->triangle_is_all_solid(f0);
                 bool s1 = surfTrack()->triangle_is_all_solid(f1);
 
-#warning Dangerous, if all vertices of a triangle are solid because they actually in contact with \
-    a solid this can let air escape even though it shouldn't.
                 if ((s0 && !s1) || (s1 && !s0)) // this is an open boundary edge
                 {
                     size_t f = (s0 ? f1 : f0);
@@ -693,12 +648,12 @@ VS3D::step(double dt)
             constrained_vertex_normal[i] = getManifoldVertexNormal(cv);
             target_normal_velocity[i] =
               (m_constrained_positions[relevant_constrained_vertices[i]] - pos(i))
-                .dot(constrained_vertex_normal[i]) / dt;
+                .dot(constrained_vertex_normal[i])
+              / dt;
         }
-        projectVelocity(
-                relevant_constrained_vertices_global_indices,
-                constrained_vertex_normal,
-                target_normal_velocity);
+        projectVelocity(relevant_constrained_vertices_global_indices,
+                        constrained_vertex_normal,
+                        target_normal_velocity);
     }
 
 #warning There might be a way to reuse the computation of the previous BiotSavart
@@ -731,7 +686,178 @@ VS3D::step(double dt)
     return (counter % 2 == 0 ? 0 : dt);
 }
 
-void VS3D::improveMesh(size_t number_iteration)
+void
+VS3D::smoothCirculation(double dt)
+{
+    if (simOptions().smoothing_type == SimOptions::SmoothingType::BIHARMONIC)
+    {
+        biharmonicSmoothing(dt);
+    }
+    else
+    {
+        laplacianSmoothing(dt);
+    }
+}
+
+void VS3D::biharmonicSmoothing(double dt)
+{
+    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs =
+        getIncidentRegions();
+
+    MatXd igl_ready_positions = getIglReadyPositions();
+    MatXi igl_ready_triangles = getIglReadyTriangles();
+
+    SparseMatd mass_matrix;
+    SparseMatd laplace_operator;
+    igl::cotmatrix(igl_ready_positions, igl_ready_triangles, laplace_operator);
+    igl::massmatrix(
+      igl_ready_positions, igl_ready_triangles, igl::MASSMATRIX_TYPE_VORONOI, mass_matrix);
+
+    Eigen::SimplicialLDLT<SparseMatd> mass_matrix_solver(mass_matrix);
+    SparseMatd inverse_mass_matrix_laplace_operator = mass_matrix_solver.solve(laplace_operator);
+    SparseMatd biharmonic_energy_hessian =
+      laplace_operator.transpose() * inverse_mass_matrix_laplace_operator;
+
+    Eigen::SimplicialLLT<SparseMatd> smoothing_solver(
+      (1 - simOptions().smoothing_coef) * dt  * mass_matrix
+      + simOptions().smoothing_coef * dt * inverse_mass_matrix_laplace_operator);
+
+    VecXd new_gammas;
+    for (int j = 0; j < m_nregion; j++)
+    {
+        for (int k = j + 1; k < m_nregion; k++)
+        {
+            new_gammas = smoothing_solver.solve((1 - simOptions().smoothing_coef) * dt * mass_matrix
+                                                * getGammas(j, k));
+            for (std::size_t vertex_index : boost::irange(0lu, mesh().nv()))
+            {
+                if (!incident_region_pairs[vertex_index](j, k))
+                {
+                    new_gammas[vertex_index] = 0;
+                }
+            }
+            setGammas(j, k, new_gammas);
+        }
+    }
+    
+}
+
+void VS3D::laplacianSmoothing(double dt)
+{
+    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs =
+        getIncidentRegions();
+
+    MatXd igl_ready_positions = getIglReadyPositions();
+    MatXi igl_ready_triangles = getIglReadyTriangles();
+
+    SparseMatd mass_matrix;
+    SparseMatd laplace_operator;
+    igl::cotmatrix(igl_ready_positions, igl_ready_triangles, laplace_operator);
+    igl::massmatrix(
+      igl_ready_positions, igl_ready_triangles, igl::MASSMATRIX_TYPE_VORONOI, mass_matrix);
+
+    Eigen::SimplicialLLT<SparseMatd> smoothing_solver(mass_matrix 
+            - simOptions().smoothing_coef * dt * laplace_operator);
+
+    VecXd new_gammas;
+    for (int j = 0; j < m_nregion; j++)
+    {
+        for (int k = j + 1; k < m_nregion; k++)
+        {
+            new_gammas = smoothing_solver.solve(mass_matrix * getGammas(j, k));
+            for (std::size_t vertex_index : boost::irange(0lu, mesh().nv()))
+            {
+                if (!incident_region_pairs[vertex_index](j, k))
+                {
+                    new_gammas[vertex_index] = 0;
+                }
+            }
+            setGammas(j, k, new_gammas);
+        }
+    }
+}
+
+std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> VS3D::getIncidentRegions() const
+{
+    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs(
+      mesh().nv());
+    for (size_t i = 0; i < mesh().nv(); i++)
+        incident_region_pairs[i].setZero(m_nregion, m_nregion);
+
+    for (size_t i = 0; i < mesh().nt(); i++)
+    {
+        LosTopos::Vec3st t = mesh().get_triangle(i);
+        LosTopos::Vec2i l = mesh().get_triangle_label(i);
+        incident_region_pairs[t[0]](l[0], l[1]) = incident_region_pairs[t[0]](l[1], l[0]) = true;
+        incident_region_pairs[t[1]](l[0], l[1]) = incident_region_pairs[t[1]](l[1], l[0]) = true;
+        incident_region_pairs[t[2]](l[0], l[1]) = incident_region_pairs[t[2]](l[1], l[0]) = true;
+    }
+    return incident_region_pairs;
+}
+
+size_t
+VS3D::getEdgeOtherVertex(size_t edge_index, size_t vertex_index) const
+{
+    LosTopos::Vec2st e = mesh().m_edges[edge_index];
+    return (e[0] == vertex_index ? e[1] : e[0]);
+}
+
+MatXd
+VS3D::getIglReadyPositions() const
+{
+    MatXd igl_ready_positions(mesh().nv(), 3u);
+    for (size_t vertex_index = 0; vertex_index < mesh().nv(); ++vertex_index)
+    {
+        igl_ready_positions.row(vertex_index) = pos(vertex_index);
+    }
+    return igl_ready_positions;
+}
+
+MatXi
+VS3D::getIglReadyTriangles() const
+{
+    MatXi igl_ready_triangles(mesh().nt(), 3u);
+    for (size_t triangle_index = 0; triangle_index < mesh().nt(); ++triangle_index)
+    {
+        igl_ready_triangles.row(triangle_index) = vc(mesh().get_triangle(triangle_index));
+    }
+    return igl_ready_triangles;
+}
+
+VecXd
+VS3D::getGammas(size_t region_a_index, size_t region_b_index) const
+{
+    return getGammas(Vec2i(region_a_index, region_b_index));
+}
+
+VecXd
+VS3D::getGammas(const Vec2i& region_pair) const
+{
+    VecXd gammas(mesh().nv());
+    for (size_t vertex_index = 0; vertex_index < mesh().nv(); ++vertex_index)
+    {
+        gammas[vertex_index] = Gamma(vertex_index).get(region_pair);
+    }
+    return gammas;
+}
+
+void
+VS3D::setGammas(size_t region_a_index, size_t region_b_index, const VecXd& gammas)
+{
+    return setGammas(Vec2i(region_a_index, region_b_index), gammas);
+}
+
+void
+VS3D::setGammas(const Vec2i& region_pair, const VecXd& gammas)
+{
+    for (size_t vertex_index = 0; vertex_index < mesh().nv(); ++vertex_index)
+    {
+        Gamma(vertex_index).set(region_pair, gammas[vertex_index]);
+    }
+}
+
+void
+VS3D::improveMesh(size_t number_iteration)
 {
     for (int i = 0; i < number_iteration; i++)
     {
