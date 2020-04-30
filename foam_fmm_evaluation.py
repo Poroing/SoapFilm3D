@@ -133,28 +133,31 @@ class SoapFilmSimulationResult(object):
 
 class SimulationParameterProductIterator(object):
 
-    def __init__(self, options):
+    def __init__(self, options, order):
+        self.order = order
         self.options = options
         self.iterator = itertools.product(
-                    *[ [ (key, value) for value in values ] for key, values in options.items() if
-                        len(values) > 0]
+                    *[ [ (key, value) for value in self.options[key] ] for key in self.options if
+                        len(self.options[key]) > 0 ]
                 )
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        next_options = next(self.iterator)
+        next_options = dict(next(self.iterator))
         path = pathlib.Path('')
-        for key, value in next_options:
-            if len(self.options[key]) > 1:
-                path = path / (key.capitalize() + str(value).capitalize())
+        for key in self.order:
+            path = path / (key.capitalize() + str(next_options[key]).capitalize())
         return path, next_options
 
 
 class SimulationParameterProduct(object):
 
-    def __init__(self):
+    def __init__(self, order=None):
+        if order is None:
+            order = []
+        self.order = order
         self.options = {}
 
     def addOption(self, key, value):
@@ -164,10 +167,17 @@ class SimulationParameterProduct(object):
         self.options.setdefault(key, []).extend(values)
 
     def getRelevantConfigurationKeys(self):
-        return [ key for key in self.options if len(self.options[key]) > 1]
+        return self.order + self.getRelevantConfigurationKeysNotInOrder()
+
+    def getRelevantConfigurationKeysNotInOrder(self):
+        return [ 
+                key
+                for key in self.options
+                if len(self.options[key]) > 1 and key not in self.order
+            ]
 
     def __iter__(self):
-        return SimulationParameterProductIterator(self.options)
+        return SimulationParameterProductIterator(self.options, self.getRelevantConfigurationKeys())
 
     def __repr__(self):
         return repr(self.options)
@@ -177,7 +187,6 @@ class SimulationParameterProduct(object):
 
 if  __name__ == '__main__':
 
-
     argument_parser = argparse.ArgumentParser(
             description='Run foam experiment of increasing size and record the time took to execute'
                 'the Fast Multipole Method')
@@ -186,31 +195,26 @@ if  __name__ == '__main__':
     argument_parser.add_argument('-s', '--save-mesh', action='store_true')
     argument_parser.add_argument('-T', '--save-mesh-period', type=int, default=1)
     argument_parser.add_argument('-c', '--config')
-    argument_parser.add_argument('-r', '--resolution', action='append', type=float, default=[])
-    argument_parser.add_argument('-S', '--size', action='append', type=int, default=[])
     argument_parser.add_argument('-t', '--simulation-time', type=float, default=4.0)
     argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
     argument_parser.add_argument('--no-save-stdout' , action='store_true')
     argument_parser.add_argument('--no-run', action='store_true',
         help='The simulaton is not run, only the configuration file is saved.')
     argument_parser.add_argument('--no-headless', action='store_true')
-    argument_parser.add_argument('--scene', action='append', default=[])
-    argument_parser.add_argument('--subdivisions', action='append', type=int, default=[])
+    argument_parser.add_argument('--directory-order', action='append', default=[])
     argument_parser.add_argument('--load',
-        help='Load simulations produced with this program. Implies --scene load --no-headless'
+        help='Load simulations produced with this program. Implies -o scene=load --no-headless'
             ' --no-save-stdout. The options must be specified in the same order for this to work' 
             ' correctly.')
     argument_parser.add_argument('--timeout', type=float,
             help='Stops each simulation after TIMEOUT seconds.')
     argument_parser.add_argument('output_directory')
     args = argument_parser.parse_args()
+
     if args.load is not None:
-        args.scene = ['load']
+        args.sim_option.append('scene=load')
         args.no_headless = True
         args.no_save_stdout = True
-
-    if args.method == []:
-        args.method = ['fmmtl']
 
     if args.config is not None:
         config = SoapFilmSimulationConfigFile.fromConfigFile(args.config)
@@ -222,20 +226,11 @@ if  __name__ == '__main__':
     config.load_increment = args.save_mesh_period
     config.simulation_time = args.simulation_time
 
-    simulation_parameter_product = SimulationParameterProduct()
+    simulation_parameter_product = SimulationParameterProduct(args.directory_order)
     for sim_option in args.sim_option:
-        key, value = sim_option.split('=')
-        simulation_parameter_product.addOption(key, value)
-
-    simulation_parameter_product.addOptions('remeshing-resolution', args.resolution)
-    simulation_parameter_product.addOptions('mesh-size-m', args.size)
-    simulation_parameter_product.addOptions('mesh-size-n', args.subdivisions)
-    simulation_parameter_product.addOptions('scene', args.scene)
-    simulation_parameter_product.addOption('simulation-time', args.simulation_time)
-    if 'fmmtl' in args.method:
-        simulation_parameter_product.addOption('fmmtl', True)
-    if 'naive' in args.method:
-        simulation_parameter_product.addOption('fmmtl', False)
+        key, values = sim_option.split('=')
+        values = values.split(',')
+        simulation_parameter_product.addOptions(key, values)
 
     for path, options in simulation_parameter_product:
         print(f'Starting simulation with options {options}.')
