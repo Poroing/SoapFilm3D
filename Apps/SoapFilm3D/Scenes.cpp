@@ -260,7 +260,7 @@ addMesh(const std::vector<Vec3d>& mesh_vertices,
     }
 }
 
-//TODO: Is copying the distribution the best ?
+// TODO: Is copying the distribution the best ?
 template<class RadiusDistribution, class CoordinateDistribution>
 std::enable_if_t<
   std::is_same_v<typename RadiusDistribution::result_type,
@@ -1730,10 +1730,6 @@ Scenes::sceneBubbleLattice(Sim* sim,
             for (std::size_t k = 0; k < lattice_bubble_size; ++k)
             {
                 position = (bubble_size + distance_between_bubble) * Vec3d(i, j, k);
-                std::cout << "Region: "
-                          << i + lattice_bubble_size * j
-                               + lattice_bubble_size * lattice_bubble_size * k + 1
-                          << std::endl;
                 createCube(position,
                            bubble_size,
                            number_subdivision,
@@ -1755,7 +1751,150 @@ Scenes::sceneBubbleLattice(Sim* sim,
     return new VS3D(vs, fs, ls, cv, cx);
 }
 
-//void sceneFlyingBubble(Sim* sim
+VS3D*
+Scenes::sceneMergedBubbleLattice(Sim* sim,
+                                 std::vector<LosTopos::Vec3d>& vs,
+                                 std::vector<LosTopos::Vec3st>& fs,
+                                 std::vector<LosTopos::Vec2i>& ls,
+                                 std::vector<size_t>& cv,
+                                 std::vector<Vec3d>& cx)
+{
+    std::size_t number_subdivision = Options::intValue("mesh-size-n");
+    std::size_t lattice_bubble_size = Options::intValue("mesh-size-m");
+    double bubble_size = 1.;
+
+    std::vector<Vec3d> vertices;
+    vertices.reserve((lattice_bubble_size + 1) * (lattice_bubble_size + 1)
+                     * (lattice_bubble_size + 1));
+
+    for (std::size_t k : boost::irange(0lu, lattice_bubble_size + 1))
+    {
+        for (std::size_t j : boost::irange(0lu, lattice_bubble_size + 1))
+        {
+            for (std::size_t i : boost::irange(0lu, lattice_bubble_size + 1))
+            {
+                vertices.push_back(bubble_size * Vec3d(i, j, k));
+            }
+        }
+    }
+
+    // Every triangles except the one that are the farthest in the positive x, y and z direction.
+    std::vector<Vec3i> triangles;
+    std::vector<Vec2i> triangle_labels;
+    std::size_t vertex_0, vertex_1, vertex_2, vertex_3, vertex_4, vertex_5, vertex_6;
+    std::size_t region_i, region_j, region_k, region;
+    for (std::size_t k : boost::irange(0lu, lattice_bubble_size))
+    {
+        for (std::size_t j : boost::irange(0lu, lattice_bubble_size))
+        {
+            for (std::size_t i : boost::irange(0lu, lattice_bubble_size))
+            {
+                vertex_0 = i + (lattice_bubble_size + 1) * j
+                           + (lattice_bubble_size + 1) * (lattice_bubble_size + 1) * k;
+                vertex_1 = vertex_0 + 1;
+                vertex_2 = vertex_0 + (lattice_bubble_size + 1);
+                vertex_3 = vertex_0 + 1 + (lattice_bubble_size + 1);
+                vertex_4 = vertex_0 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
+                vertex_5 = vertex_0 + 1 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
+                vertex_6 = vertex_0 + (lattice_bubble_size + 1)
+                           + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
+
+                region =
+                  1 + i + lattice_bubble_size * j + lattice_bubble_size * lattice_bubble_size * k;
+                region_i = (i == 0) ? 0 : region - 1;
+                region_j = (j == 0) ? 0 : region - lattice_bubble_size;
+                region_k = (k == 0) ? 0 : region - lattice_bubble_size * lattice_bubble_size;
+
+                triangles.emplace_back(vertex_0, vertex_1, vertex_2);
+                triangle_labels.emplace_back(region, region_k);
+
+                triangles.emplace_back(vertex_1, vertex_3, vertex_2);
+                triangle_labels.emplace_back(region, region_k);
+
+                triangles.emplace_back(vertex_0, vertex_2, vertex_4);
+                triangle_labels.emplace_back(region, region_i);
+
+                triangles.emplace_back(vertex_2, vertex_6, vertex_4);
+                triangle_labels.emplace_back(region, region_i);
+
+                triangles.emplace_back(vertex_0, vertex_4, vertex_5);
+                triangle_labels.emplace_back(region, region_j);
+
+                triangles.emplace_back(vertex_0, vertex_5, vertex_1);
+                triangle_labels.emplace_back(region, region_j);
+            }
+        }
+    }
+
+    // The other triangles.
+    for (std::size_t ijk_1 : boost::irange(0lu, lattice_bubble_size))
+    {
+        for (std::size_t ijk_2 : boost::irange(0lu, lattice_bubble_size))
+        {
+            // z direction
+            vertex_0 =
+              ijk_1 + ijk_2 * (lattice_bubble_size + 1)
+              + (lattice_bubble_size + 1) * (lattice_bubble_size + 1) * lattice_bubble_size;
+            vertex_1 = vertex_0 + 1;
+            vertex_2 = vertex_0 + (lattice_bubble_size + 1);
+            vertex_3 = vertex_0 + 1 + (lattice_bubble_size + 1);
+            region = 1 + ijk_1 + ijk_2 * lattice_bubble_size
+                     + lattice_bubble_size * lattice_bubble_size * (lattice_bubble_size - 1);
+
+            triangles.emplace_back(vertex_0, vertex_3, vertex_1);
+            triangle_labels.emplace_back(region, 0);
+
+            triangles.emplace_back(vertex_0, vertex_2, vertex_3);
+            triangle_labels.emplace_back(region, 0);
+
+            // y direction
+            vertex_0 = ijk_1 + (lattice_bubble_size + 1) * lattice_bubble_size
+                       + ijk_2 * (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
+            vertex_1 = vertex_0 + 1;
+            vertex_2 = vertex_0 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
+            vertex_3 = vertex_0 + 1 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
+            region = 1 + ijk_1 + (lattice_bubble_size - 1) * lattice_bubble_size
+                     + ijk_2 * lattice_bubble_size * lattice_bubble_size;
+
+            triangles.emplace_back(vertex_0, vertex_1, vertex_3);
+            triangle_labels.emplace_back(region, 0);
+
+            triangles.emplace_back(vertex_0, vertex_3, vertex_2);
+            triangle_labels.emplace_back(region, 0);
+
+            // x direction
+            vertex_0 = lattice_bubble_size + ijk_1 * (lattice_bubble_size + 1)
+                       + ijk_2 * (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
+            vertex_1 = vertex_0 + (lattice_bubble_size + 1);
+            vertex_2 = vertex_0 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
+            vertex_3 = vertex_0 + (lattice_bubble_size + 1)
+                       + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
+            region = 1 + (lattice_bubble_size - 1)
+                     + ijk_1 * lattice_bubble_size
+                     + ijk_2 * lattice_bubble_size * lattice_bubble_size;
+
+            triangles.emplace_back(vertex_0, vertex_3, vertex_1);
+            triangle_labels.emplace_back(region, 0);
+
+            triangles.emplace_back(vertex_0, vertex_2, vertex_3);
+            triangle_labels.emplace_back(region, 0);
+        }
+    }
+
+    std::size_t number_subdivisions = Options::intValue("mesh-size-n");
+    for (std::size_t dummy : boost::irange(0lu, number_subdivisions))
+    {
+        subdivide(Vec3d(0, 0, 0), 0, vertices, triangles, triangle_labels);
+    }
+
+    convertToLosTopos(vertices, vs);
+    convertToLosTopos(triangles, fs);
+    convertToLosTopos(triangle_labels, ls);
+
+    return new VS3D(vs, fs, ls, cv, cx);
+}
+
+// void sceneFlyingBubble(Sim* sim
 //                       std::vector<LosTopos::Vec3d>& vs,
 //                       std::vector<LosTopos::Vec3st>& fs,
 //                       std::vector<LosTopos::Vec2i>& ls,
@@ -2110,6 +2249,11 @@ Scenes::stepOctahedron(double dt, Sim* sim, VS3D* vs)
 
 void
 Scenes::stepBubbleLattice(double dt, Sim* sim, VS3D* vs)
+{
+}
+
+void
+Scenes::stepMergedBubbleLattice(double dt, Sim* sim, VS3D* vs)
 {
 }
 
