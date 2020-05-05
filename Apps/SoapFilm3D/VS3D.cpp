@@ -18,7 +18,6 @@
 #include "SpringForce.h"
 #include "VertexAreaForce.h"
 
-#include <boost/range/irange.hpp>
 #include <igl/cotmatrix.h>
 #include <igl/massmatrix.h>
 
@@ -46,6 +45,10 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     if (Options::strValue("smoothing-type") == "biharmonic")
     {
         m_sim_options.smoothing_type = SimOptions::SmoothingType::BIHARMONIC;
+    }
+    else if (Options::strValue("smoothing-type") == "umbrella")
+    {
+        m_sim_options.smoothing_type = SimOptions::SmoothingType::UMBRELLA;
     }
     else
     {
@@ -693,16 +696,21 @@ VS3D::smoothCirculation(double dt)
     {
         biharmonicSmoothing(dt);
     }
+    else if (simOptions().smoothing_type == SimOptions::SmoothingType::UMBRELLA)
+    {
+        umbrellaSmoothing(dt);
+    }
     else
     {
         laplacianSmoothing(dt);
     }
 }
 
-void VS3D::biharmonicSmoothing(double dt)
+void
+VS3D::biharmonicSmoothing(double dt)
 {
     std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs =
-        getIncidentRegions();
+      getIncidentRegions();
 
     MatXd igl_ready_positions = getIglReadyPositions();
     MatXi igl_ready_triangles = getIglReadyTriangles();
@@ -719,7 +727,7 @@ void VS3D::biharmonicSmoothing(double dt)
       laplace_operator.transpose() * inverse_mass_matrix_laplace_operator;
 
     Eigen::SimplicialLLT<SparseMatd> smoothing_solver(
-      (1 - simOptions().smoothing_coef) * dt  * mass_matrix
+      (1 - simOptions().smoothing_coef) * dt * mass_matrix
       + simOptions().smoothing_coef * dt * inverse_mass_matrix_laplace_operator);
 
     VecXd new_gammas;
@@ -739,45 +747,80 @@ void VS3D::biharmonicSmoothing(double dt)
             setGammas(j, k, new_gammas);
         }
     }
-    
 }
 
-void VS3D::laplacianSmoothing(double dt)
+void
+VS3D::umbrellaSmoothing(double dt)
 {
     std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs =
-        getIncidentRegions();
+      getIncidentRegions();
+
+    MatXd igl_ready_positions = getIglReadyPositions();
+    MatXi igl_ready_triangles = getIglReadyTriangles();
+
+    VecXd umbrella_laplacian;
+    VecXd gammas;
+    for (int j = 0; j < m_nregion; j++)
+    {
+        for (int k = j + 1; k < m_nregion; k++)
+        {
+            umbrella_laplacian = VecXd::Zero(mesh().nv());
+            gammas = getGammas(j, k);
+            for (std::size_t vertex_index : boost::irange(0lu, mesh().nv()))
+            {
+                if (!incident_region_pairs[vertex_index](j, k))
+                {
+                    continue;
+                }
+
+                for (std::size_t adjacent_vertex_index : getVertexAdjacentVertices(vertex_index))
+                {
+                    if (!incident_region_pairs[vertex_index](j, k))
+                    {
+                        continue;
+                    }
+
+                    umbrella_laplacian[vertex_index] +=
+                      gammas[adjacent_vertex_index] - gammas[vertex_index];
+                }
+            }
+            setGammas(j, k, gammas + simOptions().smoothing_coef * dt * umbrella_laplacian);
+        }
+    }
+}
+
+void
+VS3D::laplacianSmoothing(double dt)
+{
+    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs =
+      getIncidentRegions();
 
     MatXd igl_ready_positions = getIglReadyPositions();
     MatXi igl_ready_triangles = getIglReadyTriangles();
 
     SparseMatd mass_matrix;
     SparseMatd laplace_operator;
-    igl::cotmatrix(igl_ready_positions, igl_ready_triangles, laplace_operator);
     igl::massmatrix(
       igl_ready_positions, igl_ready_triangles, igl::MASSMATRIX_TYPE_VORONOI, mass_matrix);
-
-    Eigen::SimplicialLLT<SparseMatd> smoothing_solver(mass_matrix 
-            - simOptions().smoothing_coef * dt * laplace_operator);
 
     VecXd new_gammas;
     for (int j = 0; j < m_nregion; j++)
     {
         for (int k = j + 1; k < m_nregion; k++)
         {
+            igl_ready_triangles = getIglReadyTrianglesIncidentToRegionPair(Vec2i(j, k));
+            igl::cotmatrix(igl_ready_positions, igl_ready_triangles, laplace_operator);
+            Eigen::SimplicialLLT<SparseMatd> smoothing_solver(
+              mass_matrix - simOptions().smoothing_coef * dt * laplace_operator);
+
             new_gammas = smoothing_solver.solve(mass_matrix * getGammas(j, k));
-            for (std::size_t vertex_index : boost::irange(0lu, mesh().nv()))
-            {
-                if (!incident_region_pairs[vertex_index](j, k))
-                {
-                    new_gammas[vertex_index] = 0;
-                }
-            }
             setGammas(j, k, new_gammas);
         }
     }
 }
 
-std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> VS3D::getIncidentRegions() const
+std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>>
+VS3D::getIncidentRegions() const
 {
     std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs(
       mesh().nv());
@@ -795,11 +838,34 @@ std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> VS3D::getIncide
     return incident_region_pairs;
 }
 
+void
+VS3D::getRegionPairIncidentTriangles(const Vec2i& region_pair,
+                                     std::vector<size_t>& triangle_indices) const
+{
+    auto region_pair_incident_triangles = getRegionPairIncidentTriangles(region_pair);
+    triangle_indices.assign(region_pair_incident_triangles.begin(),
+                            region_pair_incident_triangles.end());
+}
+
+bool
+VS3D::isTriangleIncidentToRegionPair(size_t triangle_index, const Vec2i& region_pair) const
+{
+    LosTopos::Vec2i triangle_label = mesh().get_triangle_label(triangle_index);
+    return (triangle_label[0] == region_pair[0] && triangle_label[1] == region_pair[1])
+           || (region_pair[0] == triangle_label[1] && region_pair[1] == triangle_label[0]);
+}
+
 size_t
 VS3D::getEdgeOtherVertex(size_t edge_index, size_t vertex_index) const
 {
     LosTopos::Vec2st e = mesh().m_edges[edge_index];
     return (e[0] == vertex_index ? e[1] : e[0]);
+}
+
+size_t
+VS3D::getVertexDegree(size_t vertex_index) const
+{
+    return mesh().m_vertex_to_edge_map[vertex_index].size();
 }
 
 MatXd
@@ -814,6 +880,14 @@ VS3D::getIglReadyPositions() const
 }
 
 MatXi
+VS3D::getIglReadyTrianglesIncidentToRegionPair(const Vec2i& region_pair) const
+{
+    std::vector<size_t> triangle_incident_to_region_pair_indices;
+    getRegionPairIncidentTriangles(region_pair, triangle_incident_to_region_pair_indices);
+    return getIglReadyTriangles(triangle_incident_to_region_pair_indices);
+}
+
+MatXi
 VS3D::getIglReadyTriangles() const
 {
     MatXi igl_ready_triangles(mesh().nt(), 3u);
@@ -822,6 +896,17 @@ VS3D::getIglReadyTriangles() const
         igl_ready_triangles.row(triangle_index) = vc(mesh().get_triangle(triangle_index));
     }
     return igl_ready_triangles;
+}
+
+MatXi VS3D::getIglReadyTriangles(const std::vector<size_t>& triangle_indices) const
+{
+    MatXi igl_ready_triangles(triangle_indices.size(), 3u);
+    for (size_t i : boost::irange(0lu, triangle_indices.size()))
+    {
+        igl_ready_triangles.row(i) = vc(mesh().get_triangle(triangle_indices[i]));
+    }
+    return igl_ready_triangles;
+
 }
 
 VecXd
