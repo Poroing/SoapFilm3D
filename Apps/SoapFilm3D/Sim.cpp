@@ -239,6 +239,9 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
         else if (m_scene == "mergedbubblelattice")
             m_vs = Scenes::sceneMergedBubbleLattice(
               this, vertices, faces, face_labels, constrained_vertices, constrained_positions);
+        else if (m_scene == "flyingbubbles")
+            m_vs = Scenes::sceneFlyingBubbles(
+              this, vertices, faces, face_labels, constrained_vertices, constrained_positions);
 
         std::cout << "nv = " << vertices.size() << " nf = " << faces.size() << std::endl;
 
@@ -319,6 +322,8 @@ Sim::step()
         Scenes::stepBubbleLattice(m_dt, this, m_vs);
     else if (m_scene == "mergedbubblelattice")
         Scenes::stepMergedBubbleLattice(m_dt, this, m_vs);
+    else if (m_scene == "flyingbubbles")
+        Scenes::stepFlyingBubbles(m_dt, this, m_vs);
 
     // general time stepping
     double dt = m_vs->step(m_dt);

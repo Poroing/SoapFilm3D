@@ -44,11 +44,12 @@ class VS3D
          const std::vector<Vec3d>& constrained_positions = std::vector<Vec3d>(),
          const std::vector<Vec3d>& constrained_velocities = std::vector<Vec3d>(),
          const std::vector<unsigned char>& constrained_fixed = std::vector<unsigned char>());
+
     VS3D(const std::vector<LosTopos::Vec3d>& vs,
          const std::vector<LosTopos::Vec3st>& fs,
          const std::vector<LosTopos::Vec2i>& ls,
-         const std::vector<double>& initial_velocity_magnitude,
          const std::vector<Vec3d>& initial_velocity_direction,
+         const std::vector<double>& initial_velocity_magnitude,
          const std::vector<size_t>& constrained_vertices = std::vector<size_t>(),
          const std::vector<Vec3d>& constrained_positions = std::vector<Vec3d>(),
          const std::vector<Vec3d>& constrained_velocities = std::vector<Vec3d>(),
@@ -174,6 +175,12 @@ class VS3D
     std::vector<size_t> getNumberVerticesIncidentToRegions() const;
 
     bool isVertexConstrained(size_t vert) const;
+    /**
+     * projectVelocity with vertices_indices being every vertex index.
+     */
+    void projectVelocity(
+            const std::vector<Vec3d> direction,
+            const std::vector<double> velocity_along_direction);
     /**
      *  Modifies the circulations such that the velocity resulting from the Biot-Savart law
      *  has the given value value along the given direction for the given vertices. All given

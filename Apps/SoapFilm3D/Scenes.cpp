@@ -1869,8 +1869,7 @@ Scenes::sceneMergedBubbleLattice(Sim* sim,
             vertex_2 = vertex_0 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
             vertex_3 = vertex_0 + (lattice_bubble_size + 1)
                        + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
-            region = 1 + (lattice_bubble_size - 1)
-                     + ijk_1 * lattice_bubble_size
+            region = 1 + (lattice_bubble_size - 1) + ijk_1 * lattice_bubble_size
                      + ijk_2 * lattice_bubble_size * lattice_bubble_size;
 
             triangles.emplace_back(vertex_0, vertex_3, vertex_1);
@@ -1894,27 +1893,74 @@ Scenes::sceneMergedBubbleLattice(Sim* sim,
     return new VS3D(vs, fs, ls, cv, cx);
 }
 
-// void sceneFlyingBubble(Sim* sim
-//                       std::vector<LosTopos::Vec3d>& vs,
-//                       std::vector<LosTopos::Vec3st>& fs,
-//                       std::vector<LosTopos::Vec2i>& ls,
-//                       std::vector<size_t>& cv,
-//                       std::vector<Vec3d>& cx)
-//{
-//    std::vector<std::pair<Vec3d, double>> spheres = getRandomNonIntersectingSpheres(
-//            std::uniform_real_distribution(0.2, 0.5),
-//            std::uniform_real_distribution(-1.0, 1.0),
-//            Options::intValue("mesh-size-m"),
-//            1000u);
-//
-//    std::vector<Vec3d> spheres_velocity;
-//    spheres_velocity.reserve(spheres.size());
-//    for (std::size_t velocity_index = 0; velocity_index < spheres.size(); ++velocity_index)
-//    {
-//        spheres_velocity.push_back(Vec3d::Random())
-//    }
-//
-//}
+VS3D*
+Scenes::sceneFlyingBubbles(Sim* sim,
+                           std::vector<LosTopos::Vec3d>& vs,
+                           std::vector<LosTopos::Vec3st>& fs,
+                           std::vector<LosTopos::Vec2i>& ls,
+                           std::vector<size_t>& cv,
+                           std::vector<Vec3d>& cx)
+{
+    std::vector<std::pair<Vec3d, double>> spheres =
+      getRandomNonIntersectingSpheres(std::uniform_real_distribution(0.2, 0.5),
+                                      std::uniform_real_distribution(-1.0, 1.0),
+                                      Options::intValue("mesh-size-m"),
+                                      1000u);
+
+    std::vector<Vec3d> spheres_velocity;
+    spheres_velocity.reserve(spheres.size());
+    for (size_t velocity_index : boost::irange(0lu, spheres.size()))
+    {
+        spheres_velocity.push_back(Vec3d::Random());
+    }
+
+    std::vector<Vec3d> vertices;
+    std::vector<Vec3i> triangles;
+    std::vector<Vec2i> triangles_labels;
+    std::vector<Vec3d> velocities_directions;
+    std::vector<double> velocities_magnitudes;
+
+    std::vector<Vec3d> sphere_vertices;
+    std::vector<Vec3i> sphere_triangles;
+    std::vector<Vec2i> sphere_triangles_labels;
+    std::size_t number_subdivisions = Options::intValue("mesh-size-n");
+
+    for (size_t sphere_index : boost::irange(0lu, spheres.size()))
+    {
+        auto& [center, radius] = spheres[sphere_index];
+
+        sphere_vertices.clear();
+        sphere_triangles.clear();
+        sphere_triangles_labels.clear();
+        createIcoSphere(center,
+                        radius,
+                        number_subdivisions,
+                        sphere_vertices,
+                        sphere_triangles,
+                        sphere_triangles_labels,
+                        Vec2i(sphere_index + 1, 0));
+
+        addMesh(sphere_vertices,
+                sphere_triangles,
+                sphere_triangles_labels,
+                vertices,
+                triangles,
+                triangles_labels);
+
+        velocities_directions.insert(velocities_directions.end(),
+                                     sphere_vertices.size(),
+                                     spheres_velocity[sphere_index].normalized());
+        velocities_magnitudes.insert(velocities_magnitudes.end(),
+                                     sphere_vertices.size(),
+                                     spheres_velocity[sphere_index].norm());
+    }
+
+    convertToLosTopos(vertices, vs);
+    convertToLosTopos(triangles, fs);
+    convertToLosTopos(triangles_labels, ls);
+
+    return new VS3D(vs, fs, ls, velocities_directions, velocities_magnitudes, cv, cx);
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -2254,6 +2300,11 @@ Scenes::stepBubbleLattice(double dt, Sim* sim, VS3D* vs)
 
 void
 Scenes::stepMergedBubbleLattice(double dt, Sim* sim, VS3D* vs)
+{
+}
+
+void
+Scenes::stepFlyingBubbles(double dt, Sim* sim, VS3D* vs)
 {
 }
 

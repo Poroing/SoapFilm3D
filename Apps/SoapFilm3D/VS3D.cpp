@@ -277,21 +277,21 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     m_constraint_stepper = new LinearizedImplicitEuler();
 }
 
-// VS3D::VS3D(
-//            const std::vector<LosTopos::Vec3d> & vs,
-//            const std::vector<LosTopos::Vec3st> & fs,
-//            const std::vector<LosTopos::Vec2i> & ls,
-//            const std::vector<double> & initial_velocity_magnitude,
-//            const std::vector<Vec3d> & initial_velocity_direction,
-//            const std::vector<size_t> & constrained_vertices,
-//            const std::vector<Vec3d> & constrained_positions,
-//            const std::vector<Vec3d> & constrained_velocities,
-//            const std::vector<unsigned char> & constrained_fixed):
-//    VS3D(vs, fs, ls, constrained_vertices, constrained_positions, constrained_velocities,
-//    constrained_fixed)
-//{
-//    std::vector<size_t>
-//}
+VS3D::VS3D(
+            const std::vector<LosTopos::Vec3d> & vs,
+            const std::vector<LosTopos::Vec3st> & fs,
+            const std::vector<LosTopos::Vec2i> & ls,
+            const std::vector<Vec3d> & initial_velocity_direction,
+            const std::vector<double> & initial_velocity_magnitude,
+            const std::vector<size_t> & constrained_vertices,
+            const std::vector<Vec3d> & constrained_positions,
+            const std::vector<Vec3d> & constrained_velocities,
+            const std::vector<unsigned char> & constrained_fixed):
+    VS3D(vs, fs, ls, constrained_vertices, constrained_positions, constrained_velocities,
+    constrained_fixed)
+{
+    projectVelocity(initial_velocity_direction, initial_velocity_magnitude);
+}
 
 VS3D::~VS3D()
 {
@@ -961,6 +961,20 @@ VS3D::improveMesh(size_t number_iteration)
         std::cout << " " << number_vertices;
     }
     std::cout << std::endl;
+}
+
+void VS3D::projectVelocity(
+        const std::vector<Vec3d> direction,
+        const std::vector<double> velocity_along_direction)
+{
+    auto vertices_indices_range = boost::irange(0lu, mesh().nv());
+    std::vector<size_t> vertices_indices(
+            vertices_indices_range.begin(),
+            vertices_indices_range.end());
+    projectVelocity(
+            vertices_indices,
+            direction,
+            velocity_along_direction);
 }
 
 void
