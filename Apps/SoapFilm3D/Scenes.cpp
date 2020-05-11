@@ -1751,6 +1751,43 @@ Scenes::sceneBubbleLattice(Sim* sim,
     return new VS3D(vs, fs, ls, cv, cx);
 }
 
+static size_t getWholeFoamSize(size_t number_bubbles)
+{
+    return static_cast<size_t>(std::ceil(std::cbrt(number_bubbles)));
+
+}
+
+static size_t getFoamVertexIndex(size_t i, size_t j, size_t k, size_t number_bubbles)
+{
+    size_t whole_foam_size = getWholeFoamSize(number_bubbles);
+    return i + j * (whole_foam_size + 1) + k * (whole_foam_size + 1) * (whole_foam_size + 1);
+}
+
+static size_t getBubbleIndex(size_t i, size_t j, size_t k, size_t number_bubbles)
+{
+    size_t whole_foam_size = getWholeFoamSize(number_bubbles);
+    return i + j * whole_foam_size + k * whole_foam_size * whole_foam_size;
+}
+
+static size_t isBubblePresent(size_t i, size_t j, size_t k, size_t number_bubbles)
+{
+    size_t whole_foam_size = static_cast<size_t>(std::ceil(std::cbrt(number_bubbles)));
+    if (i >= whole_foam_size || j >= whole_foam_size || k >= whole_foam_size || getBubbleIndex(i, j, k, number_bubbles) >= number_bubbles)
+    {
+        return false;
+    }
+    return true;
+}
+
+static size_t getFoamBubbleRegion(size_t i, size_t j, size_t k, size_t number_bubbles)
+{
+    if (!isBubblePresent(i, j, k, number_bubbles))
+    {
+        return 0;
+    }
+    return 1 + getBubbleIndex(i, j, k, number_bubbles);
+}
+
 VS3D*
 Scenes::sceneMergedBubbleLattice(Sim* sim,
                                  std::vector<LosTopos::Vec3d>& vs,
@@ -1760,123 +1797,127 @@ Scenes::sceneMergedBubbleLattice(Sim* sim,
                                  std::vector<Vec3d>& cx)
 {
     std::size_t number_subdivision = Options::intValue("mesh-size-n");
-    std::size_t lattice_bubble_size = Options::intValue("mesh-size-m");
+    std::size_t number_bubbles = Options::intValue("mesh-size-m");
     double bubble_size = 1.;
+ 
+    size_t whole_foam_size = getWholeFoamSize(number_bubbles);
 
     std::vector<Vec3d> vertices;
-    vertices.reserve((lattice_bubble_size + 1) * (lattice_bubble_size + 1)
-                     * (lattice_bubble_size + 1));
+    vertices.reserve((whole_foam_size + 1) * (whole_foam_size + 1)
+                     * (whole_foam_size + 1));
 
-    for (std::size_t k : boost::irange(0lu, lattice_bubble_size + 1))
+    for (std::size_t k : boost::irange(0lu, whole_foam_size + 1))
     {
-        for (std::size_t j : boost::irange(0lu, lattice_bubble_size + 1))
+        for (std::size_t j : boost::irange(0lu, whole_foam_size + 1))
         {
-            for (std::size_t i : boost::irange(0lu, lattice_bubble_size + 1))
+            for (std::size_t i : boost::irange(0lu, whole_foam_size + 1))
             {
                 vertices.push_back(bubble_size * Vec3d(i, j, k));
             }
         }
     }
 
+
     // Every triangles except the one that are the farthest in the positive x, y and z direction.
     std::vector<Vec3i> triangles;
     std::vector<Vec2i> triangle_labels;
     std::size_t vertex_0, vertex_1, vertex_2, vertex_3, vertex_4, vertex_5, vertex_6;
     std::size_t region_i, region_j, region_k, region;
-    for (std::size_t k : boost::irange(0lu, lattice_bubble_size))
+    for (std::size_t k : boost::irange(0lu, whole_foam_size))
     {
-        for (std::size_t j : boost::irange(0lu, lattice_bubble_size))
+        for (std::size_t j : boost::irange(0lu, whole_foam_size))
         {
-            for (std::size_t i : boost::irange(0lu, lattice_bubble_size))
+            for (std::size_t i : boost::irange(0lu, whole_foam_size))
             {
-                vertex_0 = i + (lattice_bubble_size + 1) * j
-                           + (lattice_bubble_size + 1) * (lattice_bubble_size + 1) * k;
-                vertex_1 = vertex_0 + 1;
-                vertex_2 = vertex_0 + (lattice_bubble_size + 1);
-                vertex_3 = vertex_0 + 1 + (lattice_bubble_size + 1);
-                vertex_4 = vertex_0 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
-                vertex_5 = vertex_0 + 1 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
-                vertex_6 = vertex_0 + (lattice_bubble_size + 1)
-                           + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
+                vertex_0 = getFoamVertexIndex(i, j, k, number_bubbles);
+                vertex_1 = getFoamVertexIndex(i + 1, j, k, number_bubbles);
+                vertex_2 = getFoamVertexIndex(i, j + 1, k, number_bubbles);
+                vertex_3 = getFoamVertexIndex(i + 1, j + 1, k, number_bubbles);
+                vertex_4 = getFoamVertexIndex(i, j, k + 1, number_bubbles);
+                vertex_5 = getFoamVertexIndex(i + 1, j, k + 1, number_bubbles);
+                vertex_6 = getFoamVertexIndex(i, j + 1, k + 1, number_bubbles);
 
-                region =
-                  1 + i + lattice_bubble_size * j + lattice_bubble_size * lattice_bubble_size * k;
-                region_i = (i == 0) ? 0 : region - 1;
-                region_j = (j == 0) ? 0 : region - lattice_bubble_size;
-                region_k = (k == 0) ? 0 : region - lattice_bubble_size * lattice_bubble_size;
+                region = getFoamBubbleRegion(i, j, k, number_bubbles);
+                region_i = (i == 0) ? 0 : getFoamBubbleRegion(i - 1, j, k, number_bubbles);
+                region_j = (j == 0) ? 0 : getFoamBubbleRegion(i, j - 1, k, number_bubbles);
+                region_k = (k == 0) ? 0 : getFoamBubbleRegion(i, j, k - 1, number_bubbles);
 
-                triangles.emplace_back(vertex_0, vertex_1, vertex_2);
-                triangle_labels.emplace_back(region, region_k);
+                if (region != region_k)
+                {
+                    triangles.emplace_back(vertex_0, vertex_1, vertex_2);
+                    triangle_labels.emplace_back(region, region_k);
+                    triangles.emplace_back(vertex_1, vertex_3, vertex_2);
+                    triangle_labels.emplace_back(region, region_k);
+                }
 
-                triangles.emplace_back(vertex_1, vertex_3, vertex_2);
-                triangle_labels.emplace_back(region, region_k);
+                if (region != region_i)
+                {
+                    triangles.emplace_back(vertex_0, vertex_2, vertex_4);
+                    triangle_labels.emplace_back(region, region_i);
+                    triangles.emplace_back(vertex_2, vertex_6, vertex_4);
+                    triangle_labels.emplace_back(region, region_i);
+                }
 
-                triangles.emplace_back(vertex_0, vertex_2, vertex_4);
-                triangle_labels.emplace_back(region, region_i);
-
-                triangles.emplace_back(vertex_2, vertex_6, vertex_4);
-                triangle_labels.emplace_back(region, region_i);
-
-                triangles.emplace_back(vertex_0, vertex_4, vertex_5);
-                triangle_labels.emplace_back(region, region_j);
-
-                triangles.emplace_back(vertex_0, vertex_5, vertex_1);
-                triangle_labels.emplace_back(region, region_j);
+                if (region != region_j)
+                {
+                    triangles.emplace_back(vertex_0, vertex_4, vertex_5);
+                    triangle_labels.emplace_back(region, region_j);
+                    triangles.emplace_back(vertex_0, vertex_5, vertex_1);
+                    triangle_labels.emplace_back(region, region_j);
+                }
             }
         }
     }
 
     // The other triangles.
-    for (std::size_t ijk_1 : boost::irange(0lu, lattice_bubble_size))
+    for (std::size_t ijk_1 : boost::irange(0lu, whole_foam_size))
     {
-        for (std::size_t ijk_2 : boost::irange(0lu, lattice_bubble_size))
+        for (std::size_t ijk_2 : boost::irange(0lu, whole_foam_size))
         {
             // z direction
-            vertex_0 =
-              ijk_1 + ijk_2 * (lattice_bubble_size + 1)
-              + (lattice_bubble_size + 1) * (lattice_bubble_size + 1) * lattice_bubble_size;
-            vertex_1 = vertex_0 + 1;
-            vertex_2 = vertex_0 + (lattice_bubble_size + 1);
-            vertex_3 = vertex_0 + 1 + (lattice_bubble_size + 1);
-            region = 1 + ijk_1 + ijk_2 * lattice_bubble_size
-                     + lattice_bubble_size * lattice_bubble_size * (lattice_bubble_size - 1);
+            vertex_0 = getFoamVertexIndex(ijk_1, ijk_2, whole_foam_size, number_bubbles);
+            vertex_1 = getFoamVertexIndex(ijk_1 + 1, ijk_2, whole_foam_size, number_bubbles);
+            vertex_2 = getFoamVertexIndex(ijk_1, ijk_2 + 1, whole_foam_size, number_bubbles);
+            vertex_3 = getFoamVertexIndex(ijk_1 + 1, ijk_2 + 1, whole_foam_size, number_bubbles);
+            region = getFoamBubbleRegion(ijk_1, ijk_2, whole_foam_size - 1, number_bubbles);
 
-            triangles.emplace_back(vertex_0, vertex_3, vertex_1);
-            triangle_labels.emplace_back(region, 0);
-
-            triangles.emplace_back(vertex_0, vertex_2, vertex_3);
-            triangle_labels.emplace_back(region, 0);
+            if (region != 0)
+            {
+                triangles.emplace_back(vertex_0, vertex_3, vertex_1);
+                triangle_labels.emplace_back(region, 0);
+                triangles.emplace_back(vertex_0, vertex_2, vertex_3);
+                triangle_labels.emplace_back(region, 0);
+            }
 
             // y direction
-            vertex_0 = ijk_1 + (lattice_bubble_size + 1) * lattice_bubble_size
-                       + ijk_2 * (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
-            vertex_1 = vertex_0 + 1;
-            vertex_2 = vertex_0 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
-            vertex_3 = vertex_0 + 1 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
-            region = 1 + ijk_1 + (lattice_bubble_size - 1) * lattice_bubble_size
-                     + ijk_2 * lattice_bubble_size * lattice_bubble_size;
+            vertex_0 = getFoamVertexIndex(ijk_1, whole_foam_size, ijk_2, number_bubbles);
+            vertex_1 = getFoamVertexIndex(ijk_1 + 1, whole_foam_size, ijk_2, number_bubbles);
+            vertex_2 = getFoamVertexIndex(ijk_1, whole_foam_size, ijk_2 + 1, number_bubbles);
+            vertex_3 = getFoamVertexIndex(ijk_1 + 1, whole_foam_size, ijk_2 + 1, number_bubbles);
+            region = getFoamBubbleRegion(ijk_1, whole_foam_size - 1, ijk_2, number_bubbles);
 
-            triangles.emplace_back(vertex_0, vertex_1, vertex_3);
-            triangle_labels.emplace_back(region, 0);
-
-            triangles.emplace_back(vertex_0, vertex_3, vertex_2);
-            triangle_labels.emplace_back(region, 0);
+            if (region != 0)
+            {
+                triangles.emplace_back(vertex_0, vertex_1, vertex_3);
+                triangle_labels.emplace_back(region, 0);
+                triangles.emplace_back(vertex_0, vertex_3, vertex_2);
+                triangle_labels.emplace_back(region, 0);
+            }
 
             // x direction
-            vertex_0 = lattice_bubble_size + ijk_1 * (lattice_bubble_size + 1)
-                       + ijk_2 * (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
-            vertex_1 = vertex_0 + (lattice_bubble_size + 1);
-            vertex_2 = vertex_0 + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
-            vertex_3 = vertex_0 + (lattice_bubble_size + 1)
-                       + (lattice_bubble_size + 1) * (lattice_bubble_size + 1);
-            region = 1 + (lattice_bubble_size - 1) + ijk_1 * lattice_bubble_size
-                     + ijk_2 * lattice_bubble_size * lattice_bubble_size;
+            vertex_0 = getFoamVertexIndex(whole_foam_size, ijk_1, ijk_2, number_bubbles);
+            vertex_1 = getFoamVertexIndex(whole_foam_size, ijk_1 + 1, ijk_2, number_bubbles);
+            vertex_2 = getFoamVertexIndex(whole_foam_size, ijk_1, ijk_2 + 1, number_bubbles);
+            vertex_3 = getFoamVertexIndex(whole_foam_size, ijk_1 + 1, ijk_2 + 1, number_bubbles);
+            region = getFoamBubbleRegion(whole_foam_size - 1, ijk_1, ijk_2, number_bubbles);
 
-            triangles.emplace_back(vertex_0, vertex_3, vertex_1);
-            triangle_labels.emplace_back(region, 0);
-
-            triangles.emplace_back(vertex_0, vertex_2, vertex_3);
-            triangle_labels.emplace_back(region, 0);
+            if (region != 0)
+            {
+                triangles.emplace_back(vertex_0, vertex_3, vertex_1);
+                triangle_labels.emplace_back(region, 0);
+                triangles.emplace_back(vertex_0, vertex_2, vertex_3);
+                triangle_labels.emplace_back(region, 0);
+            }
         }
     }
 
