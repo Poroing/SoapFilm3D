@@ -277,18 +277,22 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     m_constraint_stepper = new LinearizedImplicitEuler();
 }
 
-VS3D::VS3D(
-            const std::vector<LosTopos::Vec3d> & vs,
-            const std::vector<LosTopos::Vec3st> & fs,
-            const std::vector<LosTopos::Vec2i> & ls,
-            const std::vector<Vec3d> & initial_velocity_direction,
-            const std::vector<double> & initial_velocity_magnitude,
-            const std::vector<size_t> & constrained_vertices,
-            const std::vector<Vec3d> & constrained_positions,
-            const std::vector<Vec3d> & constrained_velocities,
-            const std::vector<unsigned char> & constrained_fixed):
-    VS3D(vs, fs, ls, constrained_vertices, constrained_positions, constrained_velocities,
-    constrained_fixed)
+VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
+           const std::vector<LosTopos::Vec3st>& fs,
+           const std::vector<LosTopos::Vec2i>& ls,
+           const std::vector<Vec3d>& initial_velocity_direction,
+           const std::vector<double>& initial_velocity_magnitude,
+           const std::vector<size_t>& constrained_vertices,
+           const std::vector<Vec3d>& constrained_positions,
+           const std::vector<Vec3d>& constrained_velocities,
+           const std::vector<unsigned char>& constrained_fixed)
+  : VS3D(vs,
+         fs,
+         ls,
+         constrained_vertices,
+         constrained_positions,
+         constrained_velocities,
+         constrained_fixed)
 {
     projectVelocity(initial_velocity_direction, initial_velocity_magnitude);
 }
@@ -783,6 +787,9 @@ VS3D::umbrellaSmoothing(double dt)
                     umbrella_laplacian[vertex_index] +=
                       gammas[adjacent_vertex_index] - gammas[vertex_index];
                 }
+
+                umbrella_laplacian[vertex_index] /=
+                  getVertexAreaIncidentToRegionPair(vertex_index, Vec2i(j, k));
             }
             setGammas(j, k, gammas + simOptions().smoothing_coef * dt * umbrella_laplacian);
         }
@@ -800,6 +807,7 @@ VS3D::laplacianSmoothing(double dt)
 
     SparseMatd mass_matrix;
     SparseMatd laplace_operator;
+
     igl::massmatrix(
       igl_ready_positions, igl_ready_triangles, igl::MASSMATRIX_TYPE_VORONOI, mass_matrix);
 
@@ -868,6 +876,22 @@ VS3D::getVertexDegree(size_t vertex_index) const
     return mesh().m_vertex_to_edge_map[vertex_index].size();
 }
 
+double
+VS3D::getVertexAreaIncidentToRegionPair(size_t vertex_index, const Vec2i& region_pair) const
+{
+    double area = 0;
+    for (size_t triangle_index : mesh().m_vertex_to_triangle_map[vertex_index])
+    {
+        if (!isTriangleIncidentToRegionPair(triangle_index, region_pair))
+        {
+            continue;
+        }
+
+        area += m_st->get_triangle_area(triangle_index) / 3;
+    }
+    return area;
+}
+
 MatXd
 VS3D::getIglReadyPositions() const
 {
@@ -898,7 +922,8 @@ VS3D::getIglReadyTriangles() const
     return igl_ready_triangles;
 }
 
-MatXi VS3D::getIglReadyTriangles(const std::vector<size_t>& triangle_indices) const
+MatXi
+VS3D::getIglReadyTriangles(const std::vector<size_t>& triangle_indices) const
 {
     MatXi igl_ready_triangles(triangle_indices.size(), 3u);
     for (size_t i : boost::irange(0lu, triangle_indices.size()))
@@ -906,7 +931,6 @@ MatXi VS3D::getIglReadyTriangles(const std::vector<size_t>& triangle_indices) co
         igl_ready_triangles.row(i) = vc(mesh().get_triangle(triangle_indices[i]));
     }
     return igl_ready_triangles;
-
 }
 
 VecXd
@@ -963,18 +987,14 @@ VS3D::improveMesh(size_t number_iteration)
     std::cout << std::endl;
 }
 
-void VS3D::projectVelocity(
-        const std::vector<Vec3d> direction,
-        const std::vector<double> velocity_along_direction)
+void
+VS3D::projectVelocity(const std::vector<Vec3d> direction,
+                      const std::vector<double> velocity_along_direction)
 {
     auto vertices_indices_range = boost::irange(0lu, mesh().nv());
-    std::vector<size_t> vertices_indices(
-            vertices_indices_range.begin(),
-            vertices_indices_range.end());
-    projectVelocity(
-            vertices_indices,
-            direction,
-            velocity_along_direction);
+    std::vector<size_t> vertices_indices(vertices_indices_range.begin(),
+                                         vertices_indices_range.end());
+    projectVelocity(vertices_indices, direction, velocity_along_direction);
 }
 
 void

@@ -132,6 +132,7 @@ class VS3D
     void getRegionPairIncidentTriangles(const Vec2i& region_pair, std::vector<size_t>& triangle_indices) const;
     bool isTriangleIncidentToRegionPair(size_t triangle_index, const Vec2i& region_pair) const;
     size_t getVertexDegree(size_t vertex_index) const;
+    double getVertexAreaIncidentToRegionPair(size_t vertex_index, const Vec2i& region_pair) const;
 
     MatXd getIglReadyPositions() const;
     MatXi getIglReadyTriangles() const;
