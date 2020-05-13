@@ -260,16 +260,35 @@ addMesh(const std::vector<Vec3d>& mesh_vertices,
     }
 }
 
+bool
+isSphereIntersectingOtherSpheres(Vec3d center,
+                                 double radius,
+                                 std::vector<std::pair<Vec3d, double>> other_spheres,
+                                 double tolerance = 0.01)
+{
+    double min_distance = std::numeric_limits<double>::infinity();
+
+    double distance;
+    for (auto& [other_center, other_radius] : other_spheres)
+    {
+        distance = (center - other_center).norm() - (other_radius + radius);
+        min_distance = std::min(distance, min_distance);
+    }
+
+    return min_distance < tolerance;
+}
+
 // TODO: Is copying the distribution the best ?
 template<class RadiusDistribution, class CoordinateDistribution>
 std::enable_if_t<
   std::is_same_v<typename RadiusDistribution::result_type,
                  double> && std::is_same_v<typename CoordinateDistribution::result_type, double>,
   std::vector<std::pair<Vec3d, double>>>
-getRandomNonIntersectingSpheres(RadiusDistribution radius_distribution,
-                                CoordinateDistribution coordinate_distribution,
-                                std::size_t number_spheres,
-                                std::size_t max_number_of_tries)
+getRandomSpheres(RadiusDistribution radius_distribution,
+                 CoordinateDistribution coordinate_distribution,
+                 std::size_t number_spheres,
+                 std::size_t max_number_of_tries,
+                 bool non_intersecting = false)
 {
     std::default_random_engine engine(std::random_device{}());
 
@@ -283,23 +302,32 @@ getRandomNonIntersectingSpheres(RadiusDistribution radius_distribution,
                                  coordinate_distribution(engine));
             double radius = radius_distribution(engine);
 
-            double min_distance = std::numeric_limits<double>::infinity();
-            double distance;
-            for (auto& [other_center, other_radius] : spheres)
+            if (non_intersecting && isSphereIntersectingOtherSpheres(center, radius, spheres))
             {
-                distance = (center - other_center).norm() - (other_radius + radius);
-                min_distance = std::min(distance, min_distance);
+                continue;
             }
 
-            if (min_distance > 0.001)
-            {
-                spheres.push_back(std::pair<Vec3d, double>(center, radius));
-                break;
-            }
+            spheres.push_back(std::pair<Vec3d, double>(center, radius));
+            break;
         }
     }
 
     return spheres;
+}
+
+// TODO: Is copying the distribution the best ?
+template<class RadiusDistribution, class CoordinateDistribution>
+std::enable_if_t<
+  std::is_same_v<typename RadiusDistribution::result_type,
+                 double> && std::is_same_v<typename CoordinateDistribution::result_type, double>,
+  std::vector<std::pair<Vec3d, double>>>
+getRandomNonIntersectingSpheres(RadiusDistribution radius_distribution,
+                                CoordinateDistribution coordinate_distribution,
+                                std::size_t number_spheres,
+                                std::size_t max_number_of_tries)
+{
+    return getRandomSpheres(
+      radius_distribution, coordinate_distribution, number_spheres, max_number_of_tries, true);
 }
 
 #warning Factorize this into one templated function
@@ -797,7 +825,7 @@ Scenes::sceneFoamInit(Sim* sim,
 {
     int M = Options::intValue("mesh-size-m"); // number of bubbles
     std::vector<std::pair<Vec3d, double>> spheres =
-      getRandomNonIntersectingSpheres(std::uniform_real_distribution(0.2, 0.5),
+      getRandomSpheres(std::uniform_real_distribution(0.2, 0.5),
                                       std::uniform_real_distribution(-1.0, 1.0),
                                       M,
                                       1000u);
@@ -1751,35 +1779,40 @@ Scenes::sceneBubbleLattice(Sim* sim,
     return new VS3D(vs, fs, ls, cv, cx);
 }
 
-static size_t getWholeFoamSize(size_t number_bubbles)
+static size_t
+getWholeFoamSize(size_t number_bubbles)
 {
     return static_cast<size_t>(std::ceil(std::cbrt(number_bubbles)));
-
 }
 
-static size_t getFoamVertexIndex(size_t i, size_t j, size_t k, size_t number_bubbles)
+static size_t
+getFoamVertexIndex(size_t i, size_t j, size_t k, size_t number_bubbles)
 {
     size_t whole_foam_size = getWholeFoamSize(number_bubbles);
     return i + j * (whole_foam_size + 1) + k * (whole_foam_size + 1) * (whole_foam_size + 1);
 }
 
-static size_t getBubbleIndex(size_t i, size_t j, size_t k, size_t number_bubbles)
+static size_t
+getBubbleIndex(size_t i, size_t j, size_t k, size_t number_bubbles)
 {
     size_t whole_foam_size = getWholeFoamSize(number_bubbles);
     return i + j * whole_foam_size + k * whole_foam_size * whole_foam_size;
 }
 
-static size_t isBubblePresent(size_t i, size_t j, size_t k, size_t number_bubbles)
+static size_t
+isBubblePresent(size_t i, size_t j, size_t k, size_t number_bubbles)
 {
     size_t whole_foam_size = static_cast<size_t>(std::ceil(std::cbrt(number_bubbles)));
-    if (i >= whole_foam_size || j >= whole_foam_size || k >= whole_foam_size || getBubbleIndex(i, j, k, number_bubbles) >= number_bubbles)
+    if (i >= whole_foam_size || j >= whole_foam_size || k >= whole_foam_size
+        || getBubbleIndex(i, j, k, number_bubbles) >= number_bubbles)
     {
         return false;
     }
     return true;
 }
 
-static size_t getFoamBubbleRegion(size_t i, size_t j, size_t k, size_t number_bubbles)
+static size_t
+getFoamBubbleRegion(size_t i, size_t j, size_t k, size_t number_bubbles)
 {
     if (!isBubblePresent(i, j, k, number_bubbles))
     {
@@ -1799,12 +1832,11 @@ Scenes::sceneMergedBubbleLattice(Sim* sim,
     std::size_t number_subdivision = Options::intValue("mesh-size-n");
     std::size_t number_bubbles = Options::intValue("mesh-size-m");
     double bubble_size = 1.;
- 
+
     size_t whole_foam_size = getWholeFoamSize(number_bubbles);
 
     std::vector<Vec3d> vertices;
-    vertices.reserve((whole_foam_size + 1) * (whole_foam_size + 1)
-                     * (whole_foam_size + 1));
+    vertices.reserve((whole_foam_size + 1) * (whole_foam_size + 1) * (whole_foam_size + 1));
 
     for (std::size_t k : boost::irange(0lu, whole_foam_size + 1))
     {
@@ -1816,7 +1848,6 @@ Scenes::sceneMergedBubbleLattice(Sim* sim,
             }
         }
     }
-
 
     // Every triangles except the one that are the farthest in the positive x, y and z direction.
     std::vector<Vec3i> triangles;
