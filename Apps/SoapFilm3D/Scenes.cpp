@@ -826,9 +826,9 @@ Scenes::sceneFoamInit(Sim* sim,
     int M = Options::intValue("mesh-size-m"); // number of bubbles
     std::vector<std::pair<Vec3d, double>> spheres =
       getRandomSpheres(std::uniform_real_distribution(0.2, 0.5),
-                                      std::uniform_real_distribution(-1.0, 1.0),
-                                      M,
-                                      1000u);
+                       std::uniform_real_distribution(-1.0, 1.0),
+                       M,
+                       1000u);
 
     std::cout << M << " spheres requested; " << spheres.size() << " actually spheres generated."
               << std::endl;
@@ -2034,6 +2034,93 @@ Scenes::sceneFlyingBubbles(Sim* sim,
     return new VS3D(vs, fs, ls, velocities_directions, velocities_magnitudes, cv, cx);
 }
 
+VS3D*
+Scenes::sceneBubbleLine(Sim* sim,
+                        std::vector<LosTopos::Vec3d>& vs,
+                        std::vector<LosTopos::Vec3st>& fs,
+                        std::vector<LosTopos::Vec2i>& ls,
+                        std::vector<size_t>& cv,
+                        std::vector<Vec3d>& cx)
+{
+    size_t number_bubbles = Options::intValue("mesh-size-m");
+    double bubble_size = 1.;
+    double noise_coefficient = .25;
+
+    std::vector<Vec3d> vertices;
+    for (size_t k : boost::irange(0lu, number_bubbles + 1))
+    {
+        for (size_t j : boost::irange(0lu, 2lu))
+        {
+            for (size_t i : boost::irange(0lu, 2lu))
+            {
+                vertices.push_back(bubble_size
+                                   * (Vec3d(i, j, k) + noise_coefficient * Vec3d::Random()));
+            }
+        }
+    }
+
+    std::vector<Vec3i> triangles;
+    std::vector<Vec2i> triangles_labels;
+    size_t vertex_0, vertex_1, vertex_2, vertex_3, vertex_4, vertex_5, vertex_6, vertex_7;
+    for (size_t k : boost::irange(0lu, number_bubbles))
+    {
+        vertex_0 = k * 2 * 2;
+        vertex_1 = vertex_0 + 1;
+        vertex_2 = vertex_0 + 1 * 2;
+        vertex_3 = vertex_0 + 1 + 1 * 2;
+        vertex_4 = vertex_0 + 2 * 2;
+        vertex_5 = vertex_0 + 1 + 2 * 2;
+        vertex_6 = vertex_0 + 1 * 2 + 2 * 2;
+        vertex_7 = vertex_0 + 1 + 1 * 2 + 2 * 2;
+
+        triangles.emplace_back(vertex_0, vertex_1, vertex_3);
+        triangles_labels.emplace_back(k + 1, k);
+        triangles.emplace_back(vertex_0, vertex_3, vertex_2);
+        triangles_labels.emplace_back(k + 1, k);
+
+        triangles.emplace_back(vertex_1, vertex_3, vertex_5);
+        triangles_labels.emplace_back(0, k + 1);
+        triangles.emplace_back(vertex_5, vertex_3, vertex_7);
+        triangles_labels.emplace_back(0, k + 1);
+
+        triangles.emplace_back(vertex_1, vertex_5, vertex_0);
+        triangles_labels.emplace_back(0, k + 1);
+        triangles.emplace_back(vertex_0, vertex_5, vertex_4);
+        triangles_labels.emplace_back(0, k + 1);
+
+        triangles.emplace_back(vertex_0, vertex_4, vertex_2);
+        triangles_labels.emplace_back(0, k + 1);
+        triangles.emplace_back(vertex_4, vertex_6, vertex_2);
+        triangles_labels.emplace_back(0, k + 1);
+
+        triangles.emplace_back(vertex_3, vertex_2, vertex_7);
+        triangles_labels.emplace_back(0, k + 1);
+        triangles.emplace_back(vertex_2, vertex_6, vertex_7);
+        triangles_labels.emplace_back(0, k + 1);
+    }
+
+    vertex_0 = number_bubbles * 2 * 2;
+    vertex_1 = vertex_0 + 1;
+    vertex_2 = vertex_0 + 1 * 2;
+    vertex_3 = vertex_0 + 1 + 1 * 2;
+    triangles.emplace_back(vertex_0, vertex_3, vertex_1);
+    triangles_labels.emplace_back(number_bubbles, 0);
+    triangles.emplace_back(vertex_0, vertex_2, vertex_3);
+    triangles_labels.emplace_back(number_bubbles, 0);
+
+    convertToLosTopos(vertices, vs);
+    convertToLosTopos(triangles, fs);
+    convertToLosTopos(triangles_labels, ls);
+
+    size_t number_subdivisions = Options::intValue("mesh-size-n");
+    for (std::size_t dummy : boost::irange(0lu, number_subdivisions))
+    {
+        subdivide(Vec3d(0, 0, 0), 0, vertices, triangles, triangles_labels);
+    }
+
+    return new VS3D(vs, fs, ls, cv, cx);
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //  Scene-specific time stepping
@@ -2377,6 +2464,11 @@ Scenes::stepMergedBubbleLattice(double dt, Sim* sim, VS3D* vs)
 
 void
 Scenes::stepFlyingBubbles(double dt, Sim* sim, VS3D* vs)
+{
+}
+
+void
+Scenes::stepBubbleLine(double dt, Sim* sim, VS3D* vs)
 {
 }
 
