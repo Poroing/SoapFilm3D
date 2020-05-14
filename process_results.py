@@ -2,14 +2,16 @@ from foam_fmm_evaluation import *
 import pathlib
 import argparse
 from divide_frame_number import dividesFramesNumber 
-import ffmpeg
 import csv
+import sys
 
 def checkPathExists(path):
     if not path.exists():
         raise ValueError(f'{path.as_posix()} does not exists.')
 
 def video(path, config, skip_existing=False, overwrite=False):
+    import ffmpeg
+
     video_path = path / 'video.webm'
     if video_path.exists() and skip_existing:
         return
@@ -44,7 +46,14 @@ def getFrameFromObj(path):
     return path.parent / f'frame{int(path.name[4:10])}.png'
 
 
-def render(path, skip_existing=False, show_blender_stdout=False, number_subdivisions=0,scale=1):
+def render(
+        path,
+        path_to_blender_toolbox,
+        blender_executable='blender',
+        skip_existing=False,
+        show_blender_stdout=False,
+        number_subdivisions=0,
+        scale=1):
     for file in getObjs(path):
 
         output_frame = getFrameFromObj(file)
@@ -54,8 +63,7 @@ def render(path, skip_existing=False, show_blender_stdout=False, number_subdivis
         print(f'{file.as_posix()} --> {output_frame.as_posix()}')
         subprocess.run(
                 [ 
-                    'primusrun',
-                    'blender',
+                    blender_executable,
                     '--background',
                     '--python',
                     'render.py',
@@ -63,7 +71,8 @@ def render(path, skip_existing=False, show_blender_stdout=False, number_subdivis
                     output_frame.as_posix(),
                     file.as_posix(),
                     '--number-subdivisions', str(number_subdivisions),
-                    '--scale', str(scale)
+                    '--scale', str(scale),
+                    '--path-to-blender-toolbox', path_to_blender_toolbox
                 ],
                 capture_output=not show_blender_stdout
             )
@@ -111,6 +120,7 @@ def concatenateVideos(
         output_path,
         overwrite=False,
         font_color='black'):
+    import ffmpeg
 
     streams = []
     for path, config in zip(paths, configs):
@@ -128,20 +138,45 @@ def concatenateVideos(
     stream = ffmpeg.output(stream, output_path.as_posix())
     ffmpeg.run(stream)
 
+commands = ['video', 'render', 'delete-render', 'csv']
+
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
-argument_parser.add_argument('--skip-existing', action='store_true',
-    help='Takes precedence over --overwrite')
-argument_parser.add_argument('--overwrite', action='store_true')
 argument_parser.add_argument('--directory-order', action='append', default=[])
-argument_parser.add_argument('--show-blender-stdout', action='store_true')
-argument_parser.add_argument('--font-color', default='black')
-argument_parser.add_argument('command', choices=['video', 'render', 'delete-render', 'csv'])
-argument_parser.add_argument('--number-subdivisions-render', type=int, default=0)
-argument_parser.add_argument('--csv-delimiter', default=' ')
-argument_parser.add_argument('--scale', type=float, default=1)
 argument_parser.add_argument('output_directory')
+argument_parser.add_argument('command', choices=commands)
+argument_parser.add_argument('command_arguments', nargs=argparse.REMAINDER)
+
+commands_arguments_parser = {
+        command : argparse.ArgumentParser(prog=sys.argv[0]+f' {command}')
+        for command in commands 
+        }
+
+commands_arguments_parser['video'].add_argument(
+        '--skip-existing', action='store_true')
+commands_arguments_parser['video'].add_argument(
+        '--overwrite', action='store_true')
+commands_arguments_parser['video'].add_argument(
+        '--font-color', default='black')
+
+commands_arguments_parser['render'].add_argument(
+        '--skip-existing', action='store_true')
+commands_arguments_parser['render'].add_argument(
+        '--scale', type=float, default=1)
+commands_arguments_parser['render'].add_argument(
+        '--path-to-toolbox', required=True)
+commands_arguments_parser['render'].add_argument(
+        '--number-subdivisions-render', type=int, default=0)
+commands_arguments_parser['render'].add_argument(
+        '--show-blender-stdout', action='store_true')
+commands_arguments_parser['render'].add_argument(
+        '--blender-executable', default='blender')
+
+commands_arguments_parser['csv'].add_argument('--csv-delimiter', default=' ')
+commands_arguments_parser['csv'].add_argument('--skip-existing', action='store_true')
+
 args = argument_parser.parse_args()
+command_args = commands_arguments_parser[args.command].parse_args(args.command_arguments)
 
 output_directory = pathlib.Path(args.output_directory)
 checkPathExists(output_directory)
@@ -165,21 +200,30 @@ for path, _ in simulation_parameter_product:
     configs.append(config)
 
     if args.command == 'video':
-        video(experiment_path, config, skip_existing=args.skip_existing, overwrite=args.overwrite)
+        video(
+                experiment_path,
+                config,
+                skip_existing=command_args.skip_existing,
+                overwrite=command_args.overwrite)
 
     if args.command == 'render':
         render(
                 experiment_path,
-                skip_existing=args.skip_existing,
-                show_blender_stdout=args.show_blender_stdout,
-                number_subdivisions=args.number_subdivisions_render,
-                scale=args.scale)
+                command_args.path_to_toolbox,
+                blender_executable=command_args.blender_executable,
+                skip_existing=command_args.skip_existing,
+                show_blender_stdout=command_args.show_blender_stdout,
+                number_subdivisions=command_args.number_subdivisions_render,
+                scale=command_args.scale)
 
     if args.command == 'delete-render':
         deleteRender(experiment_path)
 
     if args.command == 'csv':
-        produceCSV(experiment_path, skip_existing=args.skip_existing, delimiter=args.csv_delimiter)
+        produceCSV(
+                experiment_path,
+                skip_existing=command_args.skip_existing,
+                delimiter=command_args.csv_delimiter)
 
 if args.command == 'video' and simulation_parameter_product.getNumberDifferentConfigurations() > 1:
     concatenateVideos(
@@ -187,6 +231,6 @@ if args.command == 'video' and simulation_parameter_product.getNumberDifferentCo
             configs,
             simulation_parameter_product.getRelevantConfigurationKeys(),
             output_directory / 'video.webm',
-            font_color=args.font_color)
+            font_color=command_args.font_color)
 
         

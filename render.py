@@ -1,6 +1,4 @@
 import sys
-sys.path.append('/home/jean/Programation/Blender/BlenderToolbox/cycles') # your path to “BlenderToolbox/cycles”
-from include import *
 import argparse
 import pathlib
 
@@ -54,8 +52,12 @@ argument_parser.add_argument('--mesh-translation-y', type=float, default=0)
 argument_parser.add_argument('--mesh-translation-z', type=float, default=0)
 argument_parser.add_argument('--number-subdivisions', type=int, default=0)
 argument_parser.add_argument('--environment_texture')
+argument_parser.add_argument('--path-to-blender-toolbox', required=True)
 args = argument_parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 
+sys.path.append(args.path_to_blender_toolbox)
+from include import *
+print(sys.path)
 
 ## initialize blender
 imgRes_x = args.image_size_x
