@@ -6,6 +6,7 @@ import argparse
 import shutil
 import csv
 import itertools
+import functools
 
 class SoapFilmSimulationConfigFile(object):
 
@@ -160,6 +161,12 @@ class SimulationParameterProduct(object):
         self.order = order
         self.options = {}
 
+    def getNumberDifferentConfigurations(self):
+        return functools.reduce(
+                lambda x, y: x * y,
+                map(len, self.options.values()),
+                1)
+
     def addOption(self, key, value):
         self.options.setdefault(key, []).append(value)
 
@@ -253,8 +260,10 @@ if  __name__ == '__main__':
 
         try:
             stdout = simulation.run()
-        except RuntimeError:
+        except RuntimeError as e:
             (experiment_path / 'error').touch()
+            print(e)
+            continue
         except subprocess.TimeoutExpired as timeout_expired:
             stdout = timeout_expired.stdout.decode()
 
