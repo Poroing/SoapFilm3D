@@ -125,10 +125,6 @@ class Render(Process):
                     (obj_path, path) for obj_path in objs[::self.arguments.render_every_n_obj]
                 ]
         if self.arguments.number_threads > 1:
-            list(pool.imap_unordered(
-                self.renderObj,
-                objs,
-                max(len(objs) // (5 * self.arguments.number_threads), 1)))
             pool = multiprocessing.Pool(self.arguments.number_threads)
             list(pool.imap_unordered(
                 self.renderObj,
