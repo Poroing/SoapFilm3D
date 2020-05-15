@@ -88,7 +88,8 @@ class Render(Process):
             if file.suffix == '.obj':
                 yield file
 
-    def renderObj(self, obj_path, path):
+    def renderObj(self, obj_path_and_path):
+        obj_path, path = obj_path_and_path
         output_frame = self.getFrameFromObj(obj_path, path)
         if self.arguments.skip_existing and output_frame.exists():
             print(f'{output_frame} exists, skipping.')
@@ -134,8 +135,8 @@ class Render(Process):
             pool.join()
 
         else:
-            for obj, path in objs_and_path:
-                self.renderObj(obj, path)
+            for obj_and_path in objs_and_path:
+                self.renderObj(obj_and_path)
         
 
 
