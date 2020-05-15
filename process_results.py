@@ -77,31 +77,34 @@ class Render(Process):
             return
 
         print(f'{obj_path} --> {output_frame}')
-        subprocess.run(
-                [ 
-                    self.arguments.blender_executable,
-                    '--background',
-                    '--python',
-                    'render.py',
-                    '--',
-                    output_frame.as_posix(),
-                    obj_path.as_posix(),
-                    '--number-subdivisions', str(self.arguments.number_subdivisions_render),
-                    '--scale', str(self.arguments.scale),
-                    '--path-to-blender-toolbox', self.arguments.path_to_toolbox
-                ],
-                capture_output=not self.arguments.show_blender_stdout
-            )
-
+        if not self.arguments.test_run:
+            subprocess.run(
+                    [ 
+                        self.arguments.blender_executable,
+                        '--background',
+                        '--python',
+                        'render.py',
+                        '--',
+                        output_frame.as_posix(),
+                        obj_path.as_posix(),
+                        '--number-subdivisions', str(self.arguments.number_subdivisions_render),
+                        '--scale', str(self.arguments.scale),
+                        '--path-to-blender-toolbox', self.arguments.path_to_toolbox,
+                        '--environment_texture', self.arguments.environment_texture
+                    ],
+                    capture_output=not self.arguments.show_blender_stdout
+                )
 
     def run(self, path, config):
         objs = list(Render.getObjs(path))
         if self.arguments.number_threads > 1:
-            with multiprocessing.Pool(self.arguments.number_threads) as pool:
-                list(pool.imap_unordered(
-                    self.renderObj,
-                    objs,
-                    max(len(objs) // (5 * self.arguments.number_threads), 1)))
+            pool = multiprocessing.Pool(self.arguments.number_threads)
+            list(pool.imap_unordered(
+                self.renderObj,
+                objs,
+                max(len(objs) // (5 * self.arguments.number_threads), 1)))
+            pool.close()
+            pool.join()
 
         else:
             for obj in Render.getObjs(path):
@@ -175,8 +178,8 @@ class Video(Process):
 class DeleteRender(Process):
 
     def run(self, path, config):
-        for file in getObjs(path):
-            getFrameFromObj(file).unlink(missing_ok=True)
+        for file in Render.getObjs(path):
+            Render.getFrameFromObj(file).unlink(missing_ok=True)
 
 
 commands = ['video', 'render', 'delete-render', 'csv']
@@ -217,6 +220,11 @@ commands_arguments_parser['render'].add_argument(
         '-j', '--number_threads', type=int, default=1,
         help='This command number of threads should be kept to the default if the main program'
             'number of threads is different from the default')
+commands_arguments_parser['render'].add_argument(
+        '-t', '--test-run',
+        action='store_true')
+commands_arguments_parser['render'].add_argument(
+        '--environment-texture')
 
 commands_arguments_parser['csv'].add_argument('--csv-delimiter', default=' ')
 commands_arguments_parser['csv'].add_argument('--skip-existing', action='store_true')
