@@ -66,13 +66,17 @@ class Process(object):
 
 class Render(Process):
 
+    @staticmethod
+    def getObjNumber(obj_path):
+        return int(obj_path.name[4:10])
+
     def getFrameOutputPath(self, path):
         return pathlib.Path(self.arguments.frame_output_directory) / path / 'output'
 
     def getFrameFromObj(self, obj_path, path):
         return (
                 self.getFrameOutputPath(path)
-                / f'frame{int(obj_path.name[4:10])}.png'
+                / f'frame{Render.getObjNumber(obj_path)}.png'
             )
 
     @staticmethod
@@ -111,7 +115,11 @@ class Render(Process):
         if not frame_output_path.exists():
             frame_output_path.mkdir(parents=True)
 
-        objs_and_path = [ (obj_path, path) for obj_path in Render.getObjs(experiment_path) ]
+        objs = list(Render.getObjs(experiment_path))
+        objs.sort(key=Render.getObjNumber) 
+        objs_and_path = [
+                    (obj_path, path) for obj_path in objs[::self.arguments.render_every_n_obj]
+                ]
         if self.arguments.number_threads > 1:
             with multiprocessing.Pool(self.arguments.number_threads) as pool:
                 list(pool.imap_unordered(
@@ -120,7 +128,7 @@ class Render(Process):
                     max(len(objs) // (5 * self.arguments.number_threads), 1)))
 
         else:
-            for obj in Render.getObjs(experiment_path):
+            for obj, path in objs_and_path:
                 self.renderObj(obj, path)
         
 
@@ -250,6 +258,8 @@ commands_arguments_parser['render'].add_argument(
             'number of threads is different from the default')
 commands_arguments_parser['render'].add_argument(
         '--frame-output-directory')
+commands_arguments_parser['render'].add_argument(
+        '-T', '--render-every-n-obj', type=int, default=1)
 
 commands_arguments_parser['delete-render'].add_argument(
         '--frame-output-directory')
@@ -286,7 +296,7 @@ if args.number_threads > 1:
 else:
     experiment_paths_and_config = []
     for path, config in simulation_parameter_product:
-        experiment_paths_and_config.append(process(path, config))
+        experiment_paths_and_config.append(process((path, config)))
 
 if args.command == 'video' and simulation_parameter_product.getNumberDifferentConfigurations() > 1:
     concatenateVideos(
