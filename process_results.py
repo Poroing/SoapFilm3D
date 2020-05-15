@@ -45,24 +45,35 @@ class Process(object):
         self.output_directory = output_directory
         self.arguments = arguments
 
-    def __call__(self, path):
-        experiment_path = output_directory / path
+    def getOutputDirectory(self, path):
+        return self.output_directory / path
+
+    def __call__(self, path_and_config_pairs):
+        path, config_pairs = path_and_config_pairs
+
+        experiment_path = self.getOutputDirectory(path)
         checkPathExists(experiment_path)
 
         config_path = experiment_path / 'config.txt'
         checkPathExists(config_path)
         config = SoapFilmSimulationConfigFile.fromConfigFile(config_path.as_posix())
+        config.update(config_pairs)
 
-        self.run(experiment_path, config)
+        self.run(path, config)
 
         return (experiment_path, config)
 
 
 class Render(Process):
 
-    @staticmethod
-    def getFrameFromObj(path):
-        return path.parent / f'frame{int(path.name[4:10])}.png'
+    def getFrameOutputPath(self, path):
+        return pathlib.Path(self.arguments.frame_output_directory) / path / 'output'
+
+    def getFrameFromObj(self, obj_path, path):
+        return (
+                self.getFrameOutputPath(path)
+                / f'frame{int(obj_path.name[4:10])}.png'
+            )
 
     @staticmethod
     def getObjs(path):
@@ -71,8 +82,8 @@ class Render(Process):
             if file.suffix == '.obj':
                 yield file
 
-    def renderObj(self, obj_path):
-        output_frame = Render.getFrameFromObj(obj_path)
+    def renderObj(self, obj_path, path):
+        output_frame = self.getFrameFromObj(obj_path, path)
         if self.arguments.skip_existing and output_frame.exists():
             return
 
@@ -95,30 +106,36 @@ class Render(Process):
 
 
     def run(self, path, config):
-        objs = list(Render.getObjs(path))
+        experiment_path = self.getOutputDirectory(path)
+        frame_output_path = self.getFrameOutputPath(path)
+        if not frame_output_path.exists():
+            frame_output_path.mkdir(parents=True)
+
+        objs_and_path = [ (obj_path, path) for obj_path in Render.getObjs(experiment_path) ]
         if self.arguments.number_threads > 1:
             with multiprocessing.Pool(self.arguments.number_threads) as pool:
                 list(pool.imap_unordered(
                     self.renderObj,
-                    objs,
+                    objs_and_path,
                     max(len(objs) // (5 * self.arguments.number_threads), 1)))
 
         else:
-            for obj in Render.getObjs(path):
-                self.renderObj(obj)
+            for obj in Render.getObjs(experiment_path):
+                self.renderObj(obj, path)
         
 
 
 class Csv(Process):
 
     def run(self, path, config):
-        csv_path = path / 'data.csv'
+        experiment_path = self.getOutputDirectory(path)
+        csv_path = experiment_path / 'data.csv'
         if csv_path.exists() and self.argument.skip_existing:
             return
 
         TOKEN = ['NumberVertices', 'FMMExecution', 'NaiveExecution']
         data = {}
-        stdout = (path / 'stdout').read_text()
+        stdout = (experiment_path / 'stdout').read_text()
         for line in stdout.split('\n'):
             line_tokens = line.split(' ')
             if line_tokens[0] in TOKEN:
@@ -147,22 +164,25 @@ class Video(Process):
 
     def run(self, path, config):
         import ffmpeg
-
-        video_path = path / 'video.webm'
-        if video_path.exists() and self.argument.skip_existing:
+        experiment_path = self.getOutputDirectory(path)
+        video_path = experiment_path / 'video.webm'
+        if video_path.exists() and self.arguments.skip_existing:
             return
 
-        temporary_frame_directory = path / 'Frames'
+        
+        temporary_frame_directory = experiment_path / 'Frames'
         divider = int(config.get('output-png-every-n-frames',
                     config.get('output-mesh-every-n-frames',
                         1)))
 
-        dividesFramesNumber(
-                'frame',
-                '.png',
-                temporary_frame_directory,
-                path / 'output',
-                divider)
+        if not self.arguments.skip_divide_frame_number:
+
+            dividesFramesNumber(
+                    'frame',
+                    '.png',
+                    temporary_frame_directory,
+                    experiment_path / 'output',
+                    divider)
 
         frame_rate = int(1 / (divider * config.get('time-step', 0.01)))
 
@@ -174,9 +194,18 @@ class Video(Process):
 
 class DeleteRender(Process):
 
+    def getFrameOutputPath(self, path):
+        return pathlib.Path(self.arguments.frame_output_directory) / 'output'
+
+    def getFrameFromObj(self, obj_path, path):
+        return (
+                self.getFrameOutputPath(path)
+                / f'frame{int(obj_path.name[4:10])}.png'
+            )
+
     def run(self, path, config):
-        for file in getObjs(path):
-            getFrameFromObj(file).unlink(missing_ok=True)
+        for file in Render.getObjs(path):
+            self.getFrameFromObj(file).unlink(missing_ok=True)
 
 
 commands = ['video', 'render', 'delete-render', 'csv']
@@ -200,6 +229,8 @@ commands_arguments_parser['video'].add_argument(
         '--overwrite', action='store_true')
 commands_arguments_parser['video'].add_argument(
         '--font-color', default='black')
+commands_arguments_parser['video'].add_argument(
+        '--skip-divide-frame-number', action='store_true')
 
 commands_arguments_parser['render'].add_argument(
         '--skip-existing', action='store_true')
@@ -217,6 +248,11 @@ commands_arguments_parser['render'].add_argument(
         '-j', '--number_threads', type=int, default=1,
         help='This command number of threads should be kept to the default if the main program'
             'number of threads is different from the default')
+commands_arguments_parser['render'].add_argument(
+        '--frame-output-directory')
+
+commands_arguments_parser['delete-render'].add_argument(
+        '--frame-output-directory')
 
 commands_arguments_parser['csv'].add_argument('--csv-delimiter', default=' ')
 commands_arguments_parser['csv'].add_argument('--skip-existing', action='store_true')
@@ -246,10 +282,11 @@ if args.number_threads > 1:
     with multiprocessing.Pool(args.number_threads) as pool:
         experiment_paths_and_config = list(pool.imap_unordered(
                 process,
-                [ path for path, _ in simulation_parameter_product ]))
+                [ (path, config_pairs) for path, config_pairs in simulation_parameter_product ]))
 else:
-    for path, _ in simulation_parameter_product:
-        process(path)
+    experiment_paths_and_config = []
+    for path, config in simulation_parameter_product:
+        experiment_paths_and_config.append(process(path, config))
 
 if args.command == 'video' and simulation_parameter_product.getNumberDifferentConfigurations() > 1:
     concatenateVideos(
