@@ -49,6 +49,10 @@ class SoapFilmSimulationConfigFile(object):
     def __setitem__(self, key, value):
         self.config[key] = value
 
+    def __getstate__(self):
+        return None
+
+
     def writeToFile(self, filename):
         with open(filename, mode='w', newline='') as config_file:
             config_object = csv.writer(config_file, delimiter=' ')
