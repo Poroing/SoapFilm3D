@@ -71,6 +71,8 @@ class Render(Process):
         return int(obj_path.name[4:10])
 
     def getFrameOutputPath(self, path):
+        if self.arguments.frame_output_directory is None:
+            return self.getOutputDirectory(path) / 'output'
         return pathlib.Path(self.arguments.frame_output_directory) / path / 'output'
 
     def getFrameFromObj(self, obj_path, path):
