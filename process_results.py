@@ -89,6 +89,7 @@ class Render(Process):
     def renderObj(self, obj_path, path):
         output_frame = self.getFrameFromObj(obj_path, path)
         if self.arguments.skip_existing and output_frame.exists():
+            print(f'{output_frame} exists, skipping.')
             return
 
         print(f'{obj_path} --> {output_frame}')
