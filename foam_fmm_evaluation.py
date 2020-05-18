@@ -50,7 +50,11 @@ class SoapFilmSimulationConfigFile(object):
         self.config[key] = value
 
     def __getstate__(self):
-        return None
+        """ Make sure that pickle module use __dict__ for picking."""
+        return self.__dict__
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
 
 
     def writeToFile(self, filename):
