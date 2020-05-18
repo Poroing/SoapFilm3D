@@ -39,6 +39,7 @@ public:
     static VS3D * sceneMergedBubbleLattice ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     static VS3D * sceneFlyingBubbles       ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     static VS3D * sceneBubbleLine          ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
+    static VS3D * sceneBlowingBubble          ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     
     // scene-specific time evolution
     static void stepSphere              ( double dt, Sim * sim, VS3D * vs);
@@ -64,6 +65,7 @@ public:
     static void stepMergedBubbleLattice ( double dt, Sim * sim, VS3D * vs);
     static void stepFlyingBubbles       ( double dt, Sim * sim, VS3D * vs);
     static void stepBubbleLine          ( double dt, Sim * sim, VS3D * vs);
+    static void stepBlowingBubble          ( double dt, Sim * sim, VS3D * vs);
 
 };
 

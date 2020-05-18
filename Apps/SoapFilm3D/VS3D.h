@@ -105,7 +105,6 @@ class VS3D
     void biharmonicSmoothing(double dt);
     void laplacianSmoothing(double dt);
     void umbrellaSmoothing(double dt);
-    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> getIncidentRegions() const;
     size_t getEdgeOtherVertex(size_t edge_index, size_t vertex_index) const;
     // We define the two following functions inline to avoid writing down the complicated type that it returns
     // (which heavely depends on the implementation). There might be a better way to do this.
@@ -180,16 +179,28 @@ class VS3D
      * projectVelocity with vertices_indices being every vertex index.
      */
     void projectVelocity(
-            const std::vector<Vec3d> direction,
-            const std::vector<double> velocity_along_direction);
+            const std::vector<Vec3d>& direction,
+            const std::vector<double>& velocity_along_direction);
     /**
      *  Modifies the circulations such that the velocity resulting from the Biot-Savart law
      *  has the given value value along the given direction for the given vertices. All given
      *  vertices must be manifold.
      */
-    void projectVelocity(const std::vector<size_t> vertices_indices,
-                         const std::vector<Vec3d> direction,
-                         const std::vector<double> velocity_along_direction);
+    void projectVelocity(const std::vector<size_t>& vertices_indices,
+                         const std::vector<Vec3d>& direction,
+                         const std::vector<double>& velocity_along_direction);
+    void projectAirVelocity(
+            const std::vector<Vec3d>& velocity,
+            const std::vector<Vec3d>& positions);
+
+    SparseMatd getCirculationToSheetStrengthMatrix(
+            const std::vector<std::pair<size_t, Vec2i>>& gamma_to_vertex_and_region_pair,
+            const std::vector<Eigen::MatrixXi>& vertex_and_region_pair_to_gamma) const;
+    /**
+     *  Returns the matrix which, when applied on the sheet strengths, gives the velocity at the
+     *  given positions.
+     */
+    MatXd getSheetStrengthToVelocityMatrix(const std::vector<Vec3d>& positions) const;
     MatXd getCirculationToProjectedVelocityMatrix(
       const std::vector<size_t>& vertices_indices,
       const std::vector<Vec3d>& projected_velocity_direction) const;
@@ -202,15 +213,23 @@ class VS3D
      *  index to the one with higher index.
      */
     Vec3d getManifoldVertexNormal(size_t vertex_index) const;
-    /**
-     *  Return the pair of incident region of a manifold vertex.
-     */
     Vec3d getTriangleNormalTowardRegion(size_t triangle_index, int region) const
     {
         return vc(surfTrack()->get_triangle_normal_by_region(triangle_index, region));
     }
+    /**
+     *  Return the pair of incident region of a manifold vertex.
+     */
     Vec2i getManifoldVertexRegionPair(size_t vertex_index) const;
+    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> getIncidentRegions() const;
+    /**
+     *  Returns the pair of regions incident to the given vertex. The pairs are garanted to have
+     *  the region with the lowest index as first element.
+     */
+    std::vector<Vec2i> getVertexIncidentRegionPairs(size_t vertex_index) const;
     std::vector<int> getVertexIncidentRegions(size_t vertex_index) const;
+    Vec3i getTriangleWithNormalTowardRegionWithSmallerIndex(size_t triangle_index) const;
+    Vec3d getGreensFunctionGradient(const Vec3d& argument) const;
 
   public:
     class GammaType
@@ -269,8 +288,27 @@ class VS3D
 
     const GammaType& Gamma(size_t v) const { return (*m_Gamma)[v]; }
     GammaType& Gamma(size_t v) { return (*m_Gamma)[v]; }
+    /**
+     *  Return a vector containing every vertices circulation. The returned vector only contains
+     *      the circulation that have an impact on the physics.
+     *  @param[out] gamma_to_vertex_and_region_pair Stores the vertex index and region pair
+     *      associated to the returned circulation.
+     *  @param[out] vertex_and_region_pair_to_gamma Stores the index in the returned vector
+     *      of the circulation associated with the vertex index and region pair. A -1 means no
+     *      associated circulation exists in the returned vector.
+     *
+     */
+    VecXd getGammas(
+            std::vector<std::pair<size_t, Vec2i>>& gamma_to_vertex_and_region_pair,
+            std::vector<Eigen::MatrixXi>& vertex_and_region_pair_to_gamma) const;
     VecXd getGammas(const Vec2i& region_pair) const;
     VecXd getGammas(size_t region_a_index, size_t region_b_index) const;
+    /**
+     *  See getGammas.
+     */
+    void setGammas(
+            const std::vector<std::pair<size_t, Vec2i>>& gamma_to_vertex_and_region_pair,
+            const VecXd& gammas);
     void setGammas(const Vec2i& region_pair, const VecXd& gammas);
     void setGammas(size_t region_a_index, size_t region_b_index, const VecXd& gammas);
 

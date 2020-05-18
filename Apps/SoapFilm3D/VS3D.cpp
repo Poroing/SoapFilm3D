@@ -18,6 +18,8 @@
 #include "SpringForce.h"
 #include "VertexAreaForce.h"
 
+#include <Eigen/IterativeLinearSolvers>
+#include <Eigen/SparseLU>
 #include <igl/cotmatrix.h>
 #include <igl/massmatrix.h>
 
@@ -934,6 +936,32 @@ VS3D::getIglReadyTriangles(const std::vector<size_t>& triangle_indices) const
 }
 
 VecXd
+VS3D::getGammas(std::vector<std::pair<size_t, Vec2i>>& gamma_to_vertex_and_region_pair,
+                std::vector<Eigen::MatrixXi>& vertex_and_region_pair_to_gamma) const
+{
+    std::vector<double> gammas;
+    gamma_to_vertex_and_region_pair.clear();
+    vertex_and_region_pair_to_gamma.resize(mesh().nv(),
+                                           -Eigen::MatrixXi::Ones(nregion(), nregion()));
+
+    size_t gamma_index = 0;
+    for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
+    {
+        for (Vec2i region_pair : getVertexIncidentRegionPairs(vertex_index))
+        {
+            gamma_to_vertex_and_region_pair.push_back(std::make_pair(vertex_index, region_pair));
+            vertex_and_region_pair_to_gamma[vertex_index](region_pair.x(), region_pair.y()) =
+              gamma_index;
+            vertex_and_region_pair_to_gamma[vertex_index](region_pair.y(), region_pair.x()) =
+              gamma_index;
+            gammas.push_back(Gamma(vertex_index).get(region_pair));
+            ++gamma_index;
+        }
+    }
+    return VecXd::Map(gammas.data(), gammas.size());
+}
+
+VecXd
 VS3D::getGammas(size_t region_a_index, size_t region_b_index) const
 {
     return getGammas(Vec2i(region_a_index, region_b_index));
@@ -948,6 +976,17 @@ VS3D::getGammas(const Vec2i& region_pair) const
         gammas[vertex_index] = Gamma(vertex_index).get(region_pair);
     }
     return gammas;
+}
+
+void
+VS3D::setGammas(const std::vector<std::pair<size_t, Vec2i>>& gamma_to_vertex_and_region_pair,
+                const VecXd& gammas)
+{
+    for (size_t gamma_index : boost::irange(gammas.size()))
+    {
+        auto [vertex_index, region_pair] = gamma_to_vertex_and_region_pair[gamma_index];
+        Gamma(vertex_index).set(region_pair, gammas[gamma_index]);
+    }
 }
 
 void
@@ -988,8 +1027,8 @@ VS3D::improveMesh(size_t number_iteration)
 }
 
 void
-VS3D::projectVelocity(const std::vector<Vec3d> direction,
-                      const std::vector<double> velocity_along_direction)
+VS3D::projectVelocity(const std::vector<Vec3d>& direction,
+                      const std::vector<double>& velocity_along_direction)
 {
     auto vertices_indices_range = boost::irange(0lu, mesh().nv());
     std::vector<size_t> vertices_indices(vertices_indices_range.begin(),
@@ -998,9 +1037,9 @@ VS3D::projectVelocity(const std::vector<Vec3d> direction,
 }
 
 void
-VS3D::projectVelocity(const std::vector<size_t> vertices_indices,
-                      const std::vector<Vec3d> direction,
-                      const std::vector<double> velocity_along_direction)
+VS3D::projectVelocity(const std::vector<size_t>& vertices_indices,
+                      const std::vector<Vec3d>& direction,
+                      const std::vector<double>& velocity_along_direction)
 {
     assert(vertices_indices.size() == direction.size());
     assert(vertices_indices.size() == velocity_along_direction.size());
@@ -1026,6 +1065,125 @@ VS3D::projectVelocity(const std::vector<size_t> vertices_indices,
         Vec2i incident_regions = getManifoldVertexRegionPair(vertex_index);
         (*m_Gamma)[i].set(incident_regions, result[i]);
     }
+}
+
+void
+VS3D::projectAirVelocity(const std::vector<Vec3d>& velocity, const std::vector<Vec3d>& positions)
+{
+    assert(velocity.size() == positions.size());
+
+    std::vector<Eigen::MatrixXi> vertex_and_region_pair_to_gamma;
+    std::vector<std::pair<size_t, Vec2i>> gamma_to_vertex_and_region_pair;
+    VecXd gammas = getGammas(gamma_to_vertex_and_region_pair, vertex_and_region_pair_to_gamma);
+    assert(velocity.size() * 3 <= gammas.size());
+
+    size_t system_size = gammas.size() + velocity.size() * 3;
+
+    VecXd right_hand_size(system_size);
+    std::vector<Eigen::Triplet<double>> triplets;
+    for (size_t gamma_index : boost::irange((VecXd::Index)0, gammas.size()))
+    {
+        auto [vertex_index, region_pair] = gamma_to_vertex_and_region_pair[gamma_index];
+        double vertex_area_incident_to_region_pair =
+          getVertexAreaIncidentToRegionPair(vertex_index, region_pair);
+        triplets.emplace_back(gamma_index, gamma_index, vertex_area_incident_to_region_pair);
+        right_hand_size[gamma_index] = vertex_area_incident_to_region_pair * gammas[gamma_index];
+    }
+
+    MatXd biot_savart_matrix = getSheetStrengthToVelocityMatrix(positions);
+    SparseMatd circulation_to_sheet_strength_matrix = getCirculationToSheetStrengthMatrix(
+      gamma_to_vertex_and_region_pair, vertex_and_region_pair_to_gamma);
+    MatXd circulation_to_velocity_matrix =
+      biot_savart_matrix * circulation_to_sheet_strength_matrix;
+    for (size_t i : boost::irange((MatXd::Index)0, circulation_to_velocity_matrix.rows()))
+    {
+        for (size_t j : boost::irange((MatXd::Index)0, circulation_to_velocity_matrix.cols()))
+        {
+            triplets.emplace_back(gammas.size() + i, j, circulation_to_velocity_matrix(i, j));
+            triplets.emplace_back(j, gammas.size() + i, circulation_to_velocity_matrix(i, j));
+        }
+    }
+
+    for (size_t velocity_index : boost::irange(0lu, velocity.size()))
+    {
+        right_hand_size.segment<3>(gammas.size() + velocity_index * 3) = velocity[velocity_index];
+    }
+
+
+    std::cout << "Starting Solve" << std::endl;
+    SparseMatd system_matrix(system_size, system_size);
+    system_matrix.setFromTriplets(triplets.begin(), triplets.end());
+    system_matrix.makeCompressed();
+    Eigen::SparseLU<SparseMatd> solver;
+    solver.analyzePattern(system_matrix);
+    solver.factorize(system_matrix);
+    VecXd result = solver.solve(right_hand_size);
+    gammas = result.segment(0, gammas.size());
+    std::cout << "End Solve" << std::endl;
+
+    setGammas(gamma_to_vertex_and_region_pair, gammas);
+}
+
+MatXd
+VS3D::getSheetStrengthToVelocityMatrix(const std::vector<Vec3d>& positions) const
+{
+    MatXd matrix(positions.size() * 3, mesh().nt() * 3);
+    for (size_t velocity_index : boost::irange(0lu, positions.size()))
+    {
+        for (size_t triangle_index : boost::irange(0lu, mesh().nt()))
+        {
+            Vec3d triangle_centre = getTriangleCenter(triangle_index);
+            Vec3d grad_G = getGreensFunctionGradient(positions[velocity_index]
+                                                     - getTriangleCenter(triangle_index));
+            matrix.block<3, 3>(velocity_index * 3, triangle_index * 3) = - skewSymmetric(grad_G);
+        }
+    }
+    return matrix;
+}
+
+SparseMatd
+VS3D::getCirculationToSheetStrengthMatrix(
+  const std::vector<std::pair<size_t, Vec2i>>& gamma_to_vertex_and_region_pair,
+  const std::vector<Eigen::MatrixXi>& vertex_and_region_pair_to_gamma) const
+{
+    std::vector<Eigen::Triplet<double>> triplets;
+    for (size_t triangle_index : boost::irange(0lu, mesh().nt()))
+    {
+        LosTopos::Vec3st triangle = mesh().get_triangle(triangle_index);
+        LosTopos::Vec2i region_pair = mesh().get_triangle_label(triangle_index);
+
+        double sign = 1.;
+        if (region_pair[0] > region_pair[1])
+        {
+            sign = -1.;
+        }
+
+        size_t gamma_0 =
+          vertex_and_region_pair_to_gamma[triangle[0]](region_pair[0], region_pair[1]);
+        size_t gamma_1 =
+          vertex_and_region_pair_to_gamma[triangle[1]](region_pair[0], region_pair[1]);
+        size_t gamma_2 =
+          vertex_and_region_pair_to_gamma[triangle[2]](region_pair[0], region_pair[1]);
+        Vec3d edge_01 = pos(triangle[1]) - pos(triangle[0]);
+        Vec3d edge_12 = pos(triangle[2]) - pos(triangle[1]);
+        Vec3d edge_20 = pos(triangle[0]) - pos(triangle[2]);
+
+        triplets.emplace_back(triangle_index * 3 + 0, gamma_0, -sign * (edge_12[0]));
+        triplets.emplace_back(triangle_index * 3 + 1, gamma_0, -sign * (edge_12[1]));
+        triplets.emplace_back(triangle_index * 3 + 2, gamma_0, -sign * (edge_12[2]));
+
+        triplets.emplace_back(triangle_index * 3 + 0, gamma_1, -sign * (edge_20[0]));
+        triplets.emplace_back(triangle_index * 3 + 1, gamma_1, -sign * (edge_20[1]));
+        triplets.emplace_back(triangle_index * 3 + 2, gamma_1, -sign * (edge_20[2]));
+
+        triplets.emplace_back(triangle_index * 3 + 0, gamma_2, -sign * (edge_01[0]));
+        triplets.emplace_back(triangle_index * 3 + 1, gamma_2, -sign * (edge_01[1]));
+        triplets.emplace_back(triangle_index * 3 + 2, gamma_2, -sign * (edge_01[2]));
+    }
+
+    SparseMatd matrix(3 * mesh().nt(), gamma_to_vertex_and_region_pair.size());
+    matrix.setFromTriplets(triplets.begin(), triplets.end());
+    return matrix;
 }
 
 MatXd
@@ -1140,10 +1298,27 @@ VS3D::getVertexIncidentRegions(size_t vertex_index) const
     return std::vector<int>(result.begin(), result.end());
 }
 
+std::vector<Vec2i>
+VS3D::getVertexIncidentRegionPairs(size_t vertex_index) const
+{
+    std::vector<Vec2i> incident_region_pairs;
+    std::vector<int> incident_regions = getVertexIncidentRegions(vertex_index);
+    for (size_t region_a_index : boost::irange(0lu, incident_regions.size()))
+    {
+        for (size_t region_b_index : boost::irange(region_a_index + 1, incident_regions.size()))
+        {
+            size_t region_a = region_a_index;
+            size_t region_b = region_b_index;
+            incident_region_pairs.emplace_back(std::max(region_a, region_b),
+                                               std::min(region_a, region_b));
+        }
+    }
+    return incident_region_pairs;
+}
+
 Vec3d
 VS3D::getTriangleSheetStrength(size_t triangle_index) const
 {
-
     LosTopos::Vec3st triangle = mesh().get_triangle(triangle_index);
     LosTopos::Vec2i incident_regions = mesh().get_triangle_label(triangle_index);
     Vec3d e01 = pos(triangle[1]) - pos(triangle[0]);
@@ -1153,6 +1328,13 @@ VS3D::getTriangleSheetStrength(size_t triangle_index) const
     return -(e01 * (*m_Gamma)[triangle[2]].get(incident_regions)
              + e12 * (*m_Gamma)[triangle[0]].get(incident_regions)
              + e20 * (*m_Gamma)[triangle[1]].get(incident_regions));
+}
+
+Vec3d
+VS3D::getGreensFunctionGradient(const Vec3d& argument) const
+{
+    double argument_norm = std::sqrt(argument.squaredNorm() + delta() * delta());
+    return -argument / (4 * M_PI * argument_norm * argument_norm * argument_norm);
 }
 
 void

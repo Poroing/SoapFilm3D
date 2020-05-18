@@ -2121,6 +2121,17 @@ Scenes::sceneBubbleLine(Sim* sim,
     return new VS3D(vs, fs, ls, cv, cx);
 }
 
+VS3D*
+Scenes::sceneBlowingBubble(Sim* sim,
+                           std::vector<LosTopos::Vec3d>& vs,
+                           std::vector<LosTopos::Vec3st>& fs,
+                           std::vector<LosTopos::Vec2i>& ls,
+                           std::vector<size_t>& cv,
+                           std::vector<Vec3d>& cx)
+{
+    return Scenes::sceneSphere(sim, vs, fs, ls, cv, cx);
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //  Scene-specific time stepping
@@ -2470,5 +2481,24 @@ Scenes::stepFlyingBubbles(double dt, Sim* sim, VS3D* vs)
 void
 Scenes::stepBubbleLine(double dt, Sim* sim, VS3D* vs)
 {
+}
+
+void
+Scenes::stepBlowingBubble(double dt, Sim* sim, VS3D* vs)
+{
+
+    std::vector<Vec3d> velocities = { Vec3d(0, 0, 0.05) };
+    std::vector<Vec3d> positions = { Vec3d(0, 0, -1.5) };
+    //double position_lattice_cell_size = 1. / 5.;
+    //for (size_t i : boost::irange(0, 5))
+    //{
+    //    for (size_t j : boost::irange(0, 5))
+    //    {
+    //        positions.push_back(Vec3d(-1, -1, -1.5) + position_lattice_cell_size * Vec3d(i, j, 0));
+    //        velocities.push_back(Vec3d(0, 0, 2.0));
+    //    }
+    //}
+
+    vs->projectAirVelocity(velocities, positions);
 }
 
