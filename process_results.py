@@ -71,6 +71,8 @@ class Render(Process):
         return int(obj_path.name[4:10])
 
     def getFrameOutputPath(self, path):
+        if self.arguments.frame_output_directory is None:
+            return self.getOutputDirectory(path) / 'output'
         return pathlib.Path(self.arguments.frame_output_directory) / path / 'output'
 
     def getFrameFromObj(self, obj_path, path):
@@ -86,28 +88,31 @@ class Render(Process):
             if file.suffix == '.obj':
                 yield file
 
-    def renderObj(self, obj_path, path):
+    def renderObj(self, obj_path_and_path):
+        obj_path, path = obj_path_and_path
         output_frame = self.getFrameFromObj(obj_path, path)
         if self.arguments.skip_existing and output_frame.exists():
+            print(f'{output_frame} exists, skipping.')
             return
 
         print(f'{obj_path} --> {output_frame}')
-        subprocess.run(
-                [ 
-                    self.arguments.blender_executable,
-                    '--background',
-                    '--python',
-                    'render.py',
-                    '--',
-                    output_frame.as_posix(),
-                    obj_path.as_posix(),
-                    '--number-subdivisions', str(self.arguments.number_subdivisions_render),
-                    '--scale', str(self.arguments.scale),
-                    '--path-to-blender-toolbox', self.arguments.path_to_toolbox
-                ],
-                capture_output=not self.arguments.show_blender_stdout
-            )
-
+        if not self.arguments.test_run:
+            subprocess.run(
+                    [ 
+                        self.arguments.blender_executable,
+                        '--background',
+                        '--python',
+                        'render.py',
+                        '--',
+                        output_frame.as_posix(),
+                        obj_path.as_posix(),
+                        '--number-subdivisions', str(self.arguments.number_subdivisions_render),
+                        '--scale', str(self.arguments.scale),
+                        '--path-to-blender-toolbox', self.arguments.path_to_toolbox,
+                        '--environment_texture', self.arguments.environment_texture
+                    ],
+                    capture_output=not self.arguments.show_blender_stdout
+                )
 
     def run(self, path, config):
         experiment_path = self.getOutputDirectory(path)
@@ -121,15 +126,17 @@ class Render(Process):
                     (obj_path, path) for obj_path in objs[::self.arguments.render_every_n_obj]
                 ]
         if self.arguments.number_threads > 1:
-            with multiprocessing.Pool(self.arguments.number_threads) as pool:
-                list(pool.imap_unordered(
-                    self.renderObj,
-                    objs_and_path,
-                    max(len(objs) // (5 * self.arguments.number_threads), 1)))
+            pool = multiprocessing.Pool(self.arguments.number_threads)
+            list(pool.imap_unordered(
+                self.renderObj,
+                objs_and_path,
+                max(len(objs) // (5 * self.arguments.number_threads), 1)))
+            pool.close()
+            pool.join()
 
         else:
-            for obj, path in objs_and_path:
-                self.renderObj(obj, path)
+            for obj_and_path in objs_and_path:
+                self.renderObj(obj_and_path)
         
 
 
@@ -256,6 +263,10 @@ commands_arguments_parser['render'].add_argument(
         '-j', '--number_threads', type=int, default=1,
         help='This command number of threads should be kept to the default if the main program'
             'number of threads is different from the default')
+commands_arguments_parser['render'].add_argument(
+        '-t', '--test-run', action='store_true')
+commands_arguments_parser['render'].add_argument(
+        '--environment-texture')
 commands_arguments_parser['render'].add_argument(
         '--frame-output-directory')
 commands_arguments_parser['render'].add_argument(
