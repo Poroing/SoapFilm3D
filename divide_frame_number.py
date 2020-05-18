@@ -23,7 +23,9 @@ def dividesFramesNumber(
         if not file_path.name.startswith(prefix) or not file_path.name.endswith(suffix):
             continue
         frame_number = int(file_path.name[len(prefix):-len(suffix)])
-        new_frame_number = int(frame_number / divider)
+        if frame_number % divider != 0:
+            continue
+        new_frame_number = frame_number // divider
         
         if not swap:
             new_file_name = f'{prefix}{new_frame_number}{suffix}'
