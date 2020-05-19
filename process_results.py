@@ -8,7 +8,7 @@ import multiprocessing
 
 def checkPathExists(path):
     if not path.exists():
-        raise ValueError(f'{path.as_posix()} does not exists.')
+        raise ValueError(f'{path} does not exists.')
 
 def getDescriptionText(config, relevant_configuration_keys):
     return '\n'.join([ f'{key} : {config[key]}' for key in relevant_configuration_keys ])
@@ -39,6 +39,44 @@ def concatenateVideos(
     stream = ffmpeg.output(stream, output_path.as_posix())
     ffmpeg.run(stream)
 
+def plot(simulation_parameter_product, args, output_directory):
+
+    template_path = pathlib.Path(args.template)
+    checkPathExists(template_path)
+    template = template_path.read_text()
+
+    for paths_and_configs in simulation_parameter_product.iterateOnSets(args.compare):
+
+        output_filename = args.output_file_prefix
+        for key, value in paths_and_configs[0][1].items():
+            if key not in args.compare:
+                    output_filename = output_filename + '-' + key + '=' + str(value)
+        output_filename = output_filename + '.tex'
+
+        template_instance = template
+        for path, config in paths_and_configs:
+            placeholder = args.placeholder
+            csv_path = output_directory / path / (args.data_file_stem + '.csv')
+            checkPathExists(csv_path)
+            for key, value in config.items():
+                if key in args.compare:
+                    placeholder = placeholder + '-' + key + '=' + str(value)
+            template_instance = template_instance.replace(placeholder, str(csv_path))
+
+        output_file_path = output_directory / output_filename
+        output_file_path.write_text(template_instance)
+
+        subprocess.run([ 'latexmk', '-cd', '-pdf', output_file_path])
+
+        if not args.no_convert_to_png:
+            subprocess.run([
+                    'convert',
+                    '-density', '500',
+                    output_file_path.with_suffix('.pdf'),
+                    output_file_path.with_suffix('.png')
+                ])
+
+
 class Process(object):
 
     def __init__(self, output_directory, arguments):
@@ -55,8 +93,10 @@ class Process(object):
         checkPathExists(experiment_path)
 
         config_path = experiment_path / 'config.txt'
-        checkPathExists(config_path)
-        config = SoapFilmSimulationConfigFile.fromConfigFile(config_path.as_posix())
+        if config_path.exists():
+            config = SoapFilmSimulationConfigFile.fromConfigFile(config_path.as_posix())
+        else:
+            config = SoapFilmSimulationConfigFile()
         config.update(config_pairs)
 
         self.run(path, config)
@@ -144,17 +184,17 @@ class Csv(Process):
 
     def run(self, path, config):
         experiment_path = self.getOutputDirectory(path)
-        csv_path = experiment_path / 'data.csv'
-        if csv_path.exists() and self.argument.skip_existing:
+        csv_path = experiment_path / (self.arguments.filename_stem + '.csv')
+        if csv_path.exists() and self.arguments.skip_existing:
             return
 
-        TOKEN = ['NumberVertices', 'FMMExecution', 'NaiveExecution']
         data = {}
         stdout = (experiment_path / 'stdout').read_text()
         for line in stdout.split('\n'):
             line_tokens = line.split(' ')
-            if line_tokens[0] in TOKEN:
-                data.setdefault(line_tokens[0], []).append(float(line_tokens[1]))
+            key, value = self.processLine(line_tokens)
+            if key is not None:
+                data.setdefault(key, []).append(value)
 
         data_length = None
         for value in data.values():
@@ -174,6 +214,27 @@ class Csv(Process):
 
             csv_writer.writeheader()
             csv_writer.writerows(data)
+
+class CsvExecutionTime(Csv):
+    TOKEN = ['NumberVertices', 'FMMExecution', 'NaiveExecution']
+
+    def processLine(self, line_tokens):
+        if line_tokens[0] not in self.TOKEN:
+            return None, None
+
+        return line_tokens[0], float(line_tokens[1])
+
+class CsvMeanNumberVertices(Csv):
+
+    def processLine(self, line_tokens):
+        if line_tokens[0] != 'NumberVerticesIncidentToRegions':
+            return None, None
+
+        bubble_number_vertices = list(map(int, line_tokens[2:]))
+        mean_bubble_number_vertices = sum(bubble_number_vertices) / len(bubble_number_vertices)
+        return 'MeanBubbleNumberVertices', mean_bubble_number_vertices
+
+
 
 class Video(Process):
 
@@ -222,8 +283,7 @@ class DeleteRender(Process):
         for file in Render.getObjs(path):
             self.getFrameFromObj(file).unlink(missing_ok=True)
 
-
-commands = ['video', 'render', 'delete-render', 'csv']
+commands = ['video', 'render', 'delete-render', 'csv', 'plot']
 
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
@@ -246,6 +306,8 @@ commands_arguments_parser['video'].add_argument(
         '--font-color', default='black')
 commands_arguments_parser['video'].add_argument(
         '--skip-divide-frame-number', action='store_true')
+commands_arguments_parser['video'].add_argument(
+        '--no-concatenation', action='store_true')
 
 commands_arguments_parser['render'].add_argument(
         '--skip-existing', action='store_true')
@@ -275,8 +337,27 @@ commands_arguments_parser['render'].add_argument(
 commands_arguments_parser['delete-render'].add_argument(
         '--frame-output-directory')
 
-commands_arguments_parser['csv'].add_argument('--csv-delimiter', default=' ')
-commands_arguments_parser['csv'].add_argument('--skip-existing', action='store_true')
+commands_arguments_parser['csv'].add_argument(
+        '--csv-delimiter', default=' ')
+commands_arguments_parser['csv'].add_argument(
+        '--skip-existing', action='store_true')
+commands_arguments_parser['csv'].add_argument(
+        '--mode', choices=['mean_number_vertices', 'execution_time'], required=True)
+commands_arguments_parser['csv'].add_argument(
+        '--filename-stem', default='data')
+
+commands_arguments_parser['plot'].add_argument(
+        '--template', required=True)
+commands_arguments_parser['plot'].add_argument(
+        '--placeholder', default='placeholder')
+commands_arguments_parser['plot'].add_argument(
+        '--no-convert-to-png', action='store_true')
+commands_arguments_parser['plot'].add_argument(
+        '--compare', action='append', default=[])
+commands_arguments_parser['plot'].add_argument(
+        '--output-file-prefix', default='plot')
+commands_arguments_parser['plot'].add_argument(
+        '--data-file-stem', default='data')
 
 args = argument_parser.parse_args()
 command_args = commands_arguments_parser[args.command].parse_args(args.command_arguments)
@@ -296,24 +377,37 @@ elif args.command == 'render':
     process = Render(output_directory, command_args)
 elif args.command == 'delete-render':
     process = DeleteRender(output_directory, command_args)
-elif args.command == 'csv':
-    process = Csv(output_directory, command_args)
-
-if args.number_threads > 1:
-    with multiprocessing.Pool(args.number_threads) as pool:
-        experiment_paths_and_config = list(pool.imap_unordered(
-                process,
-                [ (path, config_pairs) for path, config_pairs in simulation_parameter_product ]))
+elif args.command == 'csv' and command_args.mode == 'mean_number_vertices':
+    process = CsvMeanNumberVertices(output_directory, command_args)
+elif args.command == 'csv' and command_args.mode == 'execution_time':
+    process = CsvExecutionTime(output_directory, command_args)
 else:
-    experiment_paths_and_config = []
-    for path, config in simulation_parameter_product:
-        experiment_paths_and_config.append(process((path, config)))
+    process = None
 
-if args.command == 'video' and simulation_parameter_product.getNumberDifferentConfigurations() > 1:
+if process is not None:
+    if args.number_threads > 1:
+        with multiprocessing.Pool(args.number_threads) as pool:
+            experiment_paths_and_config = list(pool.imap_unordered(
+                    process,
+                    [ (path, config_pairs) for path, config_pairs in simulation_parameter_product ]))
+
+    else:
+        experiment_paths_and_config = []
+        for path, config in simulation_parameter_product:
+            experiment_paths_and_config.append(process((path, config)))
+
+if (
+        args.command == 'video'
+        and simulation_parameter_product.getNumberDifferentConfigurations() > 1
+        and not command_args.no_concatenation
+    ):
     concatenateVideos(
             *zip(*experiment_paths_and_config),
             simulation_parameter_product.getRelevantConfigurationKeys(),
             output_directory / 'video.webm',
             font_color=command_args.font_color)
+
+if args.command == 'plot':
+    plot(simulation_parameter_product, command_args, output_directory)
 
         
