@@ -185,11 +185,38 @@ class SimulationParameterProduct(object):
         return self.order + self.getRelevantConfigurationKeysNotInOrder()
 
     def getRelevantConfigurationKeysNotInOrder(self):
+        return self.getRelevantConfigurationKeysNotInList(self.order)
+
+    def getRelevantConfigurationKeysNotInList(self, l):
         return [ 
                 key
                 for key in self.options
-                if len(self.options[key]) > 1 and key not in self.order
+                if len(self.options[key]) > 1 and key not in l
             ]
+
+
+    def iterateOnSets(self, parameters):
+        """Returns a generator on sets of paths. The iteration is on the product of the parameters
+            not in options. Each set of paths is represented by a list of pairs, the first element
+            of each pair is the path, and the second element is a dictionary that stores the value
+            of options related to this path
+        """
+
+        #Make sure that the given options are iterated on last.
+        options = { key : values for key, values in self.options.items() if key not in parameters }
+        options.update(self.options)
+        jump_size = functools.reduce(
+                lambda v, l: len(l) * v,
+                [ self.options[key] for key in parameters ],
+                1
+            )
+
+        paths_and_configs = list(SimulationParameterProductIterator(
+            options,
+            self.getRelevantConfigurationKeys()))
+
+        for i in range(0, len(paths_and_configs), jump_size):
+            yield paths_and_configs[i : i + jump_size]
 
     def __iter__(self):
         return SimulationParameterProductIterator(self.options, self.getRelevantConfigurationKeys())

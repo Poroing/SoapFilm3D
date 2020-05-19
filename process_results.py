@@ -39,6 +39,14 @@ def concatenateVideos(
     stream = ffmpeg.output(stream, output_path.as_posix())
     ffmpeg.run(stream)
 
+def getStemInstance(config, parameters, stem):
+    stem_instance = stem
+    for key, value in config.items():
+        if key in parameters:
+            stem_instance = stem_instance + '-' + key + '=' + str(value)
+    return stem_instance
+
+
 def plot(simulation_parameter_product, args, output_directory):
 
     template_path = pathlib.Path(args.template)
@@ -47,21 +55,21 @@ def plot(simulation_parameter_product, args, output_directory):
 
     for paths_and_configs in simulation_parameter_product.iterateOnSets(args.compare):
 
-        output_filename = args.output_file_prefix
-        for key, value in paths_and_configs[0][1].items():
-            if key not in args.compare:
-                    output_filename = output_filename + '-' + key + '=' + str(value)
-        output_filename = output_filename + '.tex'
+        output_filename = getStemInstance(
+                paths_and_config[0][1],
+                simulation_parameter_product.getRelevantConfigurationKeysNotInList(args.compare),
+                args.output_file_prefix
+            ) + '.tex'
 
         template_instance = template
         for path, config in paths_and_configs:
-            placeholder = args.placeholder
+
             csv_path = output_directory / path / (args.data_file_stem + '.csv')
             checkPathExists(csv_path)
-            for key, value in config.items():
-                if key in args.compare:
-                    placeholder = placeholder + '-' + key + '=' + str(value)
-            template_instance = template_instance.replace(placeholder, str(csv_path))
+
+            placeholder = '{' + getStemInstance(config, args.compare, args.placeholder) + '}'
+
+            template_instance = template_instance.replace(placeholder, '{' + str(csv_path) + '}')
 
         output_file_path = output_directory / output_filename
         output_file_path.write_text(template_instance)
@@ -75,6 +83,65 @@ def plot(simulation_parameter_product, args, output_directory):
                     output_file_path.with_suffix('.pdf'),
                     output_file_path.with_suffix('.png')
                 ])
+
+def compileExecutionTime(rows):
+    execution_time = [ row.get('NaiveExecution', row.get('FMMExecution', None)) for row in rows ]
+    execution_time.sort()
+    return {
+            'MedianExecutionTime' : execution_time[len(execution_time) // 2],
+            'MeanExecutionTime' : sum(map(float, execution_time)) / len(execution_time)
+        }
+
+def compileMeanBubbleNumberVertices(rows):
+    bubble_vertices = [ row['MeanBubbleNumberVertices'] for row in rows ]
+    bubble_vertices.sort()
+    return {
+            "MedianBubbleVertices" : bubble_vertices[len(bubble_vertices) // 2],
+            "MeanBubbleVertices" : sum(map(float, bubble_vertices)) / len(bubble_vertices)
+        }
+
+def compile(output_directory, path, stem, compile_function, args):
+    data_path = output_directory / path / (stem + '.csv')
+    with open(data_path, newline='') as data_file:
+        data_object = csv.DictReader(data_file, delimiter=args.delimiter)
+        compiled_data = compile_function(list(data_object))
+    return compiled_data
+
+def aggregate(simulation_parameter_product, args, output_directory):
+    
+    for paths_and_configs in simulation_parameter_product.iterateOnSets([ args.aggregate_on ]):
+        data = []
+        for path, config in paths_and_configs:
+            compiled_data = { args.aggregate_on : config[args.aggregate_on] }
+            if args.execution_time_file_stem is not None:
+                compiled_data.update(compile(
+                        output_directory,
+                        path,
+                        args.execution_time_file_stem,
+                        compileExecutionTime,
+                        args
+                    ))
+            if args.mean_number_vertices_file_stem is not None:
+                compiled_data.update(compile(
+                        output_directory,
+                        path,
+                        args.mean_number_vertices_file_stem,
+                        compileMeanBubbleNumberVertices,
+                        args
+                    ))
+            data.append(compiled_data)
+
+        output_filename = getStemInstance(
+                paths_and_configs[0][1],
+                simulation_parameter_product.getRelevantConfigurationKeysNotInList(
+                        [ args.aggregate_on ]
+                    ),
+                args.output_file_stem
+            ) + '.csv'
+        with open(output_directory / output_filename, newline='', mode='w') as output_file:
+            output_object = csv.DictWriter(output_file, data[0].keys(), delimiter=args.delimiter)
+            output_object.writeheader()
+            output_object.writerows(data)
 
 
 class Process(object):
@@ -178,8 +245,6 @@ class Render(Process):
             for obj_and_path in objs_and_path:
                 self.renderObj(obj_and_path)
         
-
-
 class Csv(Process):
 
     def run(self, path, config):
@@ -283,7 +348,7 @@ class DeleteRender(Process):
         for file in Render.getObjs(path):
             self.getFrameFromObj(file).unlink(missing_ok=True)
 
-commands = ['video', 'render', 'delete-render', 'csv', 'plot']
+commands = ['video', 'render', 'delete-render', 'csv', 'plot', 'aggregate']
 
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
@@ -359,6 +424,17 @@ commands_arguments_parser['plot'].add_argument(
 commands_arguments_parser['plot'].add_argument(
         '--data-file-stem', default='data')
 
+commands_arguments_parser['aggregate'].add_argument(
+        '--aggregate-on', required=True)
+commands_arguments_parser['aggregate'].add_argument(
+        '--execution-time-file-stem')
+commands_arguments_parser['aggregate'].add_argument(
+        '--mean-number-vertices-file-stem')
+commands_arguments_parser['aggregate'].add_argument(
+        '--delimiter', default=' ')
+commands_arguments_parser['aggregate'].add_argument(
+        '--output-file-stem', default='aggregate')
+
 args = argument_parser.parse_args()
 command_args = commands_arguments_parser[args.command].parse_args(args.command_arguments)
 
@@ -409,5 +485,8 @@ if (
 
 if args.command == 'plot':
     plot(simulation_parameter_product, command_args, output_directory)
+
+if args.command == 'aggregate':
+    aggregate(simulation_parameter_product, command_args, output_directory)
 
         
