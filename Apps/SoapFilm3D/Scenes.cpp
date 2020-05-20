@@ -2132,6 +2132,189 @@ Scenes::sceneBlowingBubble(Sim* sim,
     return Scenes::sceneSphere(sim, vs, fs, ls, cv, cx);
 }
 
+static size_t
+getHexagonLatticeIndex(size_t i, size_t j, size_t size_straw_lattice)
+{
+    return i * 3 * (size_straw_lattice + 1) + j;
+}
+
+static size_t
+getHexagonLatticeSize(size_t size_straw_lattice)
+{
+    return (2 * size_straw_lattice + 2) * 3 * (size_straw_lattice + 1);
+}
+
+static size_t
+getTranslatedHexagonVertexIndex(size_t vertex_index, size_t i, size_t j, size_t size_straw_lattice)
+{
+    return vertex_index + getHexagonLatticeIndex(2 * i + (j % 2), 3 * j, size_straw_lattice);
+}
+
+static size_t
+getHexagonCenterIndex(size_t i, size_t j, size_t size_straw_lattice)
+{
+    return getTranslatedHexagonVertexIndex(
+      getHexagonLatticeIndex(1, 2, size_straw_lattice), i, j, size_straw_lattice);
+}
+
+static size_t
+getHexagonBackCenterIndex(size_t i, size_t j, size_t size_straw_lattice)
+{
+    return getHexagonLatticeSize(size_straw_lattice) + i * size_straw_lattice + j;
+}
+
+static size_t
+getHexagonRegion(size_t i, size_t j, size_t size_straw_lattice)
+{
+    return i * size_straw_lattice + j + 1;
+}
+
+static size_t
+getHexagonVertexIndex(size_t vertex_index, size_t i, size_t j, size_t size_straw_lattice)
+{
+    size_t left_bottom_index;
+    switch (vertex_index)
+    {
+        case 0:
+            left_bottom_index = getHexagonLatticeIndex(1, 0, size_straw_lattice);
+            break;
+        case 1:
+            left_bottom_index = getHexagonLatticeIndex(2, 1, size_straw_lattice);
+            break;
+        case 2:
+            left_bottom_index = getHexagonLatticeIndex(2, 3, size_straw_lattice);
+            break;
+        case 3:
+            left_bottom_index = getHexagonLatticeIndex(1, 4, size_straw_lattice);
+            break;
+        case 4:
+            left_bottom_index = getHexagonLatticeIndex(0, 3, size_straw_lattice);
+            break;
+        case 5:
+            left_bottom_index = getHexagonLatticeIndex(0, 1, size_straw_lattice);
+            break;
+        default:
+            return (size_t)-1;
+    }
+
+    return getTranslatedHexagonVertexIndex(left_bottom_index, i, j, size_straw_lattice);
+}
+
+VS3D*
+Scenes::sceneStraws(Sim* sim,
+                    std::vector<LosTopos::Vec3d>& vs,
+                    std::vector<LosTopos::Vec3st>& fs,
+                    std::vector<LosTopos::Vec2i>& ls,
+                    std::vector<size_t>& cv,
+                    std::vector<Vec3d>& cx)
+{
+    size_t size_straw_lattice = Options::intValue("mesh-size-m");
+    double straw_radius = 1.0;
+
+    std::vector<Vec3d> vertices;
+    std::vector<Vec3i> triangles;
+    std::vector<Vec2i> triangles_labels;
+
+    double L = std::sqrt(3) * straw_radius / 2;
+    double l = straw_radius / 2;
+    for (size_t i : boost::irange(0lu, 2 * size_straw_lattice + 2))
+    {
+        for (size_t j : boost::irange(0lu, size_straw_lattice + 1))
+        {
+            vertices.push_back(i * Vec3d(L, 0, 0) + j * Vec3d(0, l + straw_radius, 0));
+            vertices.push_back(i * Vec3d(L, 0, 0) + j * Vec3d(0, l + straw_radius, 0)
+                               + Vec3d(0, l, 0));
+            vertices.push_back(i * Vec3d(L, 0, 0) + j * Vec3d(0, l + straw_radius, 0)
+                               + Vec3d(0, l + straw_radius / 2, 0));
+        }
+    }
+
+    for (size_t i : boost::irange(0lu, size_straw_lattice))
+    {
+        for (size_t j : boost::irange(0lu, size_straw_lattice))
+        {
+            vertices.push_back(vertices[getHexagonCenterIndex(i, j, size_straw_lattice)]
+                               + Vec3d(0, 0, -straw_radius));
+        }
+    }
+
+    std::vector<std::vector<std::pair<size_t, size_t>>> vertex_to_triangle_map(vertices.size());
+    for (size_t i : boost::irange(0lu, size_straw_lattice))
+    {
+        for (size_t j : boost::irange(0lu, size_straw_lattice))
+        {
+            for (size_t vertex_index : boost::irange(0lu, 6lu))
+            {
+                triangles.emplace_back(
+                        getHexagonCenterIndex(i, j, size_straw_lattice),
+                        getHexagonVertexIndex(vertex_index, i, j, size_straw_lattice),
+                        getHexagonVertexIndex((vertex_index + 1) % 6, i, j, size_straw_lattice));
+                triangles_labels.emplace_back(getHexagonRegion(i, j, size_straw_lattice), 0);
+                triangles.emplace_back(
+                        getHexagonBackCenterIndex(i, j, size_straw_lattice),
+                        getHexagonVertexIndex(vertex_index, i, j, size_straw_lattice),
+                        getHexagonVertexIndex((vertex_index + 1) % 6, i, j, size_straw_lattice));
+                triangles_labels.emplace_back(0, getHexagonRegion(i, j, size_straw_lattice));
+            }
+        }
+    }
+
+    for (size_t triangle_index : boost::irange(0lu, triangles.size()))
+    {
+        Vec3i triangle = triangles[triangle_index];
+        vertex_to_triangle_map[triangle.x()].emplace_back(triangle_index, 0);
+        vertex_to_triangle_map[triangle.y()].emplace_back(triangle_index, 1);
+        vertex_to_triangle_map[triangle.z()].emplace_back(triangle_index, 2);
+    }
+
+    std::vector<size_t> mapping(vertices.size(), -1);
+    size_t new_index = 0;
+    for (size_t vertex_index : boost::irange(0lu, vertices.size()))
+    {
+        if (!vertex_to_triangle_map[vertex_index].empty())
+        {
+            mapping[vertex_index] = new_index;
+            for (auto [triangle_index, index] : vertex_to_triangle_map[vertex_index])
+            {
+                triangles[triangle_index][index] = new_index;
+            }
+            ++new_index;
+        }
+    }
+
+    for (int vertex_index = vertices.size() - 1; vertex_index >= 0; --vertex_index)
+    {
+        if (vertex_to_triangle_map[vertex_index].empty())
+        {
+            vertices.erase(vertices.begin() + vertex_index);
+        }
+    }
+
+    for (size_t i : boost::irange(0lu, size_straw_lattice))
+    {
+        for (size_t j : boost::irange(0lu, size_straw_lattice))
+        {
+            cv.push_back(mapping[getHexagonBackCenterIndex(i, j, size_straw_lattice)]);
+            for (size_t vertex_index : boost::irange(0lu, 6lu))
+            {
+                cv.push_back(mapping[getHexagonVertexIndex(vertex_index, i, j, size_straw_lattice)]);
+            }
+        }
+    }
+    std::sort(cv.begin(), cv.end());
+    auto new_end = std::unique(cv.begin(), cv.end());
+    cv.erase(new_end, cv.end());
+
+    for (size_t i = 0; i < cv.size(); i++)
+        cx.push_back(vertices[cv[i]]);
+
+    convertToLosTopos(vertices, vs);
+    convertToLosTopos(triangles, fs);
+    convertToLosTopos(triangles_labels, ls);
+
+    return new VS3D(vs, fs, ls, cv, cx);
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //  Scene-specific time stepping
@@ -2489,16 +2672,23 @@ Scenes::stepBlowingBubble(double dt, Sim* sim, VS3D* vs)
 
     std::vector<Vec3d> velocities = { Vec3d(0, 0, 0.05) };
     std::vector<Vec3d> positions = { Vec3d(0, 0, -1.5) };
-    //double position_lattice_cell_size = 1. / 5.;
-    //for (size_t i : boost::irange(0, 5))
+    // double position_lattice_cell_size = 1. / 5.;
+    // for (size_t i : boost::irange(0, 5))
     //{
     //    for (size_t j : boost::irange(0, 5))
     //    {
-    //        positions.push_back(Vec3d(-1, -1, -1.5) + position_lattice_cell_size * Vec3d(i, j, 0));
-    //        velocities.push_back(Vec3d(0, 0, 2.0));
+    //        positions.push_back(Vec3d(-1, -1, -1.5) + position_lattice_cell_size * Vec3d(i, j,
+    //        0)); velocities.push_back(Vec3d(0, 0, 2.0));
     //    }
     //}
 
     vs->projectAirVelocity(velocities, positions);
+}
+
+void
+Scenes::stepStraws(double dt, Sim* sim, VS3D* vs)
+{
+    for (size_t i = 0; i < vs->m_constrained_vertices.size(); i++)
+        vs->m_constrained_positions[i] += Vec3d(0, 0, -3) * dt;
 }
 
