@@ -81,7 +81,7 @@ Please run the code using the project folder that containing everything (assets,
 | output-mesh-every-n-frames                | 0                       |
 | output-obj                                | 0                       |
 | output-obj-every-n-frames                 | 0                       |
-| remeshing-resolutions                     | 0.1                     |
+| remeshing-resolution                     | 0.1                     |
 | remeshing-iterations                      | 1                       |
 | initial-remeshing-iterations              | 1                       |
 | lostopos-collision-epsilon-fraction       | 1e-4                    |
