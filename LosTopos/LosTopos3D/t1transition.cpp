@@ -116,7 +116,12 @@ bool T1Transition::t1_pass()
     for (size_t i = 0; i < mesh.nv(); i++)
     {
         size_t xj = i;
-        
+
+        if (m_surf.vertex_is_all_solid(xj))
+        {
+            continue;
+        }
+
         std::set<int> vertex_regions_set;
         for (size_t i = 0; i < mesh.m_vertex_to_triangle_map[xj].size(); i++)
         {
@@ -252,7 +257,7 @@ bool T1Transition::t1_pass()
         //  already come into contact, or the tendency may have dropped to negative.
         if (mesh.m_vertex_to_triangle_map[xj].size() == 0)
             continue;
-        
+
         bool contact = false;
         for (size_t i = 0; i < mesh.m_vertex_to_triangle_map[xj].size(); i++)
         {
