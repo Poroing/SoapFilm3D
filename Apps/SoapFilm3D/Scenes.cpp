@@ -260,22 +260,62 @@ addMesh(const std::vector<Vec3d>& mesh_vertices,
     }
 }
 
-bool
-isSphereIntersectingOtherSpheres(Vec3d center,
-                                 double radius,
-                                 std::vector<std::pair<Vec3d, double>> other_spheres,
-                                 double tolerance = 0.01)
+template<typename SphereRange>
+double
+getSphereDistanceToSpheres(const Vec3d& center, double radius, const SphereRange& other_spheres)
 {
     double min_distance = std::numeric_limits<double>::infinity();
 
     double distance;
-    for (auto& [other_center, other_radius] : other_spheres)
+    for (const auto& [other_center, other_radius] : other_spheres)
     {
         distance = (center - other_center).norm() - (other_radius + radius);
         min_distance = std::min(distance, min_distance);
     }
+    return min_distance;
+}
 
-    return min_distance < tolerance;
+double
+getMinimumDistanceBetweenSpheres(const std::vector<std::pair<Vec3d, double>>& spheres)
+{
+    double min_distance = std::numeric_limits<double>::infinity();
+    for (auto it = spheres.begin(); it != spheres.end(); ++it)
+    {
+        const auto& [center, radius] = *it;
+        min_distance =
+          std::min(getSphereDistanceToSpheres(
+                     center, radius, boost::make_iterator_range(it + 1, spheres.end())),
+                   min_distance);
+    }
+    return min_distance;
+}
+
+double
+getMaximumDistanceOfOneSphereToOthers(const std::vector<std::pair<Vec3d, double>>& spheres)
+{
+    double max_distance = -std::numeric_limits<double>::infinity();
+    for (auto it = spheres.begin(); it != spheres.end(); ++it)
+    {
+        const auto& [center, radius] = *it;
+        auto is_not_sphere = [&it](const std::pair<Vec3d, double>& sphere) {
+            return sphere != *it;
+        };
+        max_distance =
+          std::max(getSphereDistanceToSpheres(
+                     center, radius, spheres | boost::adaptors::filtered(is_not_sphere)),
+                   max_distance);
+    }
+    return max_distance;
+}
+
+bool
+isSphereIntersectingOtherSpheres(const Vec3d& center,
+                                 double radius,
+                                 const std::vector<std::pair<Vec3d, double>>& other_spheres,
+                                 double tolerance = 0.01)
+{
+
+    return getSphereDistanceToSpheres(center, radius, other_spheres) < tolerance;
 }
 
 // TODO: Is copying the distribution the best ?
@@ -2246,14 +2286,14 @@ Scenes::sceneStraws(Sim* sim,
             for (size_t vertex_index : boost::irange(0lu, 6lu))
             {
                 triangles.emplace_back(
-                        getHexagonCenterIndex(i, j, size_straw_lattice),
-                        getHexagonVertexIndex(vertex_index, i, j, size_straw_lattice),
-                        getHexagonVertexIndex((vertex_index + 1) % 6, i, j, size_straw_lattice));
+                  getHexagonCenterIndex(i, j, size_straw_lattice),
+                  getHexagonVertexIndex(vertex_index, i, j, size_straw_lattice),
+                  getHexagonVertexIndex((vertex_index + 1) % 6, i, j, size_straw_lattice));
                 triangles_labels.emplace_back(getHexagonRegion(i, j, size_straw_lattice), 0);
                 triangles.emplace_back(
-                        getHexagonBackCenterIndex(i, j, size_straw_lattice),
-                        getHexagonVertexIndex(vertex_index, i, j, size_straw_lattice),
-                        getHexagonVertexIndex((vertex_index + 1) % 6, i, j, size_straw_lattice));
+                  getHexagonBackCenterIndex(i, j, size_straw_lattice),
+                  getHexagonVertexIndex(vertex_index, i, j, size_straw_lattice),
+                  getHexagonVertexIndex((vertex_index + 1) % 6, i, j, size_straw_lattice));
                 triangles_labels.emplace_back(0, getHexagonRegion(i, j, size_straw_lattice));
             }
         }
@@ -2297,7 +2337,8 @@ Scenes::sceneStraws(Sim* sim,
             cv.push_back(mapping[getHexagonBackCenterIndex(i, j, size_straw_lattice)]);
             for (size_t vertex_index : boost::irange(0lu, 6lu))
             {
-                cv.push_back(mapping[getHexagonVertexIndex(vertex_index, i, j, size_straw_lattice)]);
+                cv.push_back(
+                  mapping[getHexagonVertexIndex(vertex_index, i, j, size_straw_lattice)]);
             }
         }
     }
@@ -2313,6 +2354,87 @@ Scenes::sceneStraws(Sim* sim,
     convertToLosTopos(triangles_labels, ls);
 
     return new VS3D(vs, fs, ls, cv, cx);
+}
+
+void
+growBubbleTowardRegionZero(VS3D& vs,
+                           double total_displacement_magnitude,
+                           double intermediate_displacement_magnitude)
+{
+    size_t number_displacement =
+      std::ceil(total_displacement_magnitude / intermediate_displacement_magnitude);
+
+    std::vector<Vec3d> vertices_normals;
+    for (size_t i : boost::irange(0lu, number_displacement))
+    {
+        vertices_normals = vs.getVerticesNormalsTowardRegion(0);
+        for (size_t vertex_index : boost::irange(0lu, vs.mesh().nv()))
+        {
+            vs.surfTrack()->pm_newpositions[vertex_index] =
+              vs.surfTrack()->pm_positions[vertex_index]
+              + intermediate_displacement_magnitude * vc(vertices_normals[vertex_index]);
+        }
+
+        double actual_displacement_magnitude;
+        vs.surfTrack()->integrate(intermediate_displacement_magnitude,
+                                  actual_displacement_magnitude);
+
+        vs.improveMesh(1);
+    }
+};
+
+VS3D*
+Scenes::sceneNewFoam(Sim* sim,
+                     std::vector<LosTopos::Vec3d>& vs,
+                     std::vector<LosTopos::Vec3st>& fs,
+                     std::vector<LosTopos::Vec2i>& ls,
+                     std::vector<size_t>& cv,
+                     std::vector<Vec3d>& cx)
+{
+    int M = Options::intValue("mesh-size-m"); // number of bubbles
+    double bubble_radius = 1.;
+    double cube_size = bubble_radius * (std::cbrt(M) / 0.56);
+    std::vector<std::pair<Vec3d, double>> spheres =
+      getRandomNonIntersectingSpheres(
+              std::uniform_real_distribution(bubble_radius, bubble_radius),
+                       std::uniform_real_distribution(0., cube_size),
+                       M,
+                       1000u);
+
+    if (spheres.size() < M)
+    {
+        throw std::runtime_error("Not enough spheres were generated");
+    }
+
+    int N = Options::intValue("mesh-size-n"); // subdiv levels
+
+    std::vector<Vec3d> v_all;
+    std::vector<Vec3i> f_all;
+    std::vector<Vec2i> l_all;
+
+    std::vector<Vec3d> v;
+    std::vector<Vec3i> f;
+    std::vector<Vec2i> l;
+    std::size_t sphere_interior_region = 1;
+    for (const auto& [center, radius] : spheres)
+    {
+        v.clear();
+        f.clear();
+        l.clear();
+        createIcoSphere(center, radius, N, v, f, l, Vec2i(sphere_interior_region, 0));
+        addMesh(v, f, l, v_all, f_all, l_all);
+
+        ++sphere_interior_region;
+    }
+
+    convertToLosTopos(v_all, vs);
+    convertToLosTopos(f_all, fs);
+    convertToLosTopos(l_all, ls);
+
+    VS3D* result = new VS3D(vs, fs, ls, cv, cx);
+    growBubbleTowardRegionZero(
+      *result, 0.2 * bubble_radius + getMaximumDistanceOfOneSphereToOthers(spheres), 0.1 * bubble_radius);
+    return result;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2691,4 +2813,10 @@ Scenes::stepStraws(double dt, Sim* sim, VS3D* vs)
     for (size_t i = 0; i < vs->m_constrained_vertices.size(); i++)
         vs->m_constrained_positions[i] += Vec3d(0, 0, -3) * dt;
 }
+
+void
+Scenes::stepNewFoam(double dt, Sim* sim, VS3D* vs)
+{
+}
+
 

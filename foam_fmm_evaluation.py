@@ -72,17 +72,29 @@ class SoapFilmSimulation(object):
 
     config_file_name = 'config.txt'
 
+    @staticmethod
+    def hasFinishedInit(stdout):
+        return stdout.find('Execution') != -1
+
+    @staticmethod
+    def hasNotEnoughSphere(stderr):
+        return stdout.find('Not enough spheres') != -1
+
     def __init__(self,
             output_directory,
             delete_existing=False,
             config=None,
             headless=True,
             capture_stdout=True,
-            timeout=None
+            timeout=None,
+            retry_on_failed_initialization=False,
+            retry_on_not_enough_spheres=False
             ):
         self.capture_stdout = capture_stdout
         self.headless = headless
         self.timeout = timeout
+        self.retry_on_failed_initialization = retry_on_failed_initialization
+        self.retry_on_not_enough_spheres = retry_on_not_enough_spheres
 
         if config is None:
             config = SoapFilmSimulationConfigFile()
@@ -99,6 +111,14 @@ class SoapFilmSimulation(object):
         self.config.output_dir = output_directory / 'output'
         self.writeConfig()
 
+    def shouldCaptureStdout(self):
+        return (
+                self.capture_stdout
+                or self.retry_on_failed_initialization
+                or self.retry_on_not_enough_spheres
+            )
+
+
     @property
     def config_file(self):
         return self.output_directory / SoapFilmSimulation.config_file_name
@@ -113,13 +133,26 @@ class SoapFilmSimulation(object):
                     self.config_file.as_posix(),
                     'headless' if self.headless else 'output'
                 ],
-                capture_output=self.capture_stdout,
+                capture_output=self.shouldCaptureStdout(),
                 text=True,
                 timeout=self.timeout)
 
         if completed_process.returncode != 0:
-            print(completed_process.stderr)
-            raise RuntimeError('An error as occured during the simulation')
+            if (
+                    (
+                        not self.retry_on_failed_initialization
+                        or SoapFilmSimulation.hasFinishedInit(completed_process.stdout)
+                    )
+                    and (
+                        not self.retry_on_not_enough_spheres
+                        or not SoapFilmSimulation.hasNotEnoughSphere(completed_process.stderr)
+                    )
+
+                ):
+                print(completed_process.stderr)
+                raise RuntimeError('An error as occured during the simulation')
+            else:
+                return self.run()
 
         return completed_process.stdout
 
@@ -244,6 +277,10 @@ if  __name__ == '__main__':
         help='The simulaton is not run, only the configuration file is saved.')
     argument_parser.add_argument('--no-headless', action='store_true')
     argument_parser.add_argument('--directory-order', action='append', default=[])
+    argument_parser.add_argument('--retry-on-failed-initialization', action='store_true',
+        help='Implies no --no-save-stdout')
+    argument_parser.add_argument('--retry-on-not-enough-spheres', action='store_true',
+        help='Implies no --no-save-stdout')
     argument_parser.add_argument('--load',
         help='Load simulations produced with this program. Implies -o scene=load --no-headless'
             ' --no-save-stdout. The options must be specified in the same order for this to work' 
@@ -288,7 +325,9 @@ if  __name__ == '__main__':
                 capture_stdout=not args.no_save_stdout,
                 config=config,
                 headless=not args.no_headless,
-                timeout=args.timeout)
+                timeout=args.timeout,
+                retry_on_failed_initialization=args.retry_on_failed_initialization,
+                retry_on_not_enough_spheres=args.retry_on_not_enough_spheres)
 
         if args.no_run:
             continue

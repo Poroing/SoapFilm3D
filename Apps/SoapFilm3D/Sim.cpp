@@ -251,6 +251,9 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
         else if (m_scene == "straws")
             m_vs = Scenes::sceneStraws(
               this, vertices, faces, face_labels, constrained_vertices, constrained_positions);
+        else if (m_scene == "newfoam")
+            m_vs = Scenes::sceneNewFoam(
+              this, vertices, faces, face_labels, constrained_vertices, constrained_positions);
 
         std::cout << "nv = " << vertices.size() << " nf = " << faces.size() << std::endl;
 
@@ -339,6 +342,8 @@ Sim::step()
         Scenes::stepBlowingBubble(m_dt, this, m_vs);
     else if (m_scene == "straws")
         Scenes::stepStraws(m_dt, this, m_vs);
+    else if (m_scene == "newfoam")
+        Scenes::stepNewFoam(m_dt, this, m_vs);
 
     // general time stepping
     double dt = m_vs->step(m_dt);
