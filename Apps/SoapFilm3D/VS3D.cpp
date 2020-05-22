@@ -11,6 +11,7 @@
 #include "ADT/advec.h"
 #include "LinearizedImplicitEuler.h"
 #include "LosTopos/LosTopos3D/subdivisionscheme.h"
+#include "fmmtl/fmmtl/util/Clock.hpp"
 #include "SimOptions.h"
 
 #include "LinearBendingForce.h"
@@ -370,6 +371,8 @@ VS3D::step(double dt)
     static int counter = 0;
     counter++;
 
+    Clock time_step_computation_duration;
+
     if (counter % 2 == 0)
     {
         // mesh improvement
@@ -392,51 +395,7 @@ VS3D::step(double dt)
         }
     }
 
-    // shift all Gammas for each region pair to their global mean
-    MatXd means(m_nregion, m_nregion);
-    means.setZero();
-    Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic> counters(m_nregion, m_nregion);
-    counters.setZero();
-
-    for (size_t i = 0; i < mesh().nv(); i++)
-    {
-        std::set<Vec2i, Vec2iComp> region_pairs;
-        for (size_t j = 0; j < mesh().m_vertex_to_triangle_map[i].size(); j++)
-        {
-            LosTopos::Vec2i l = mesh().get_triangle_label(mesh().m_vertex_to_triangle_map[i][j]);
-            region_pairs.insert(l[0] < l[1] ? Vec2i(l[0], l[1]) : Vec2i(l[1], l[0]));
-        }
-
-        for (std::set<Vec2i, Vec2iComp>::iterator j = region_pairs.begin(); j != region_pairs.end();
-             j++)
-        {
-            Vec2i rp = *j;
-            means(rp[0], rp[1]) += (*m_Gamma)[i].get(rp);
-            counters(rp[0], rp[1])++;
-        }
-    }
-
-    for (int i = 0; i < m_nregion; i++)
-        for (int j = i + 1; j < m_nregion; j++)
-            if (counters(i, j) != 0)
-                means(i, j) /= counters(i, j);
-
-    for (size_t i = 0; i < mesh().nv(); i++)
-    {
-        std::set<Vec2i, Vec2iComp> region_pairs;
-        for (size_t j = 0; j < mesh().m_vertex_to_triangle_map[i].size(); j++)
-        {
-            LosTopos::Vec2i l = mesh().get_triangle_label(mesh().m_vertex_to_triangle_map[i][j]);
-            region_pairs.insert(l[0] < l[1] ? Vec2i(l[0], l[1]) : Vec2i(l[1], l[0]));
-        }
-
-        for (std::set<Vec2i, Vec2iComp>::iterator j = region_pairs.begin(); j != region_pairs.end();
-             j++)
-        {
-            Vec2i rp = *j;
-            (*m_Gamma)[i].set(rp, (*m_Gamma)[i].get(rp) - means(rp[0], rp[1]));
-        }
-    }
+    shiftGammasToGlobalMean();
 
     // damping by smoothing
     if (true)
@@ -459,70 +418,10 @@ VS3D::step(double dt)
             }
         }*/
 
-    // contruct the open boudnary extra faces
-    m_obefc.clear();
-    m_obefe.clear();
-    m_obefn.clear();
-    std::vector<size_t> ob;   // open boundary edges
-    std::set<size_t> obv_set; // open boundary vertices
-    for (size_t i = 0; i < mesh().ne(); i++)
-    {
-        if (surfTrack()->edge_is_all_solid(i)) // this is a constrained edge
-        {
-            // assert(mesh().m_edge_to_triangle_map[i].size() == 2);
-            if (mesh().m_edge_to_triangle_map[i].size() == 2)
-            {
 
-                size_t f0 = mesh().m_edge_to_triangle_map[i][0];
-                size_t f1 = mesh().m_edge_to_triangle_map[i][1];
-                bool s0 = surfTrack()->triangle_is_all_solid(f0);
-                bool s1 = surfTrack()->triangle_is_all_solid(f1);
-
-                if ((s0 && !s1) || (s1 && !s0)) // this is an open boundary edge
-                {
-                    size_t f = (s0 ? f1 : f0);
-
-                    size_t v0 = mesh().m_edges[i][0];
-                    size_t v1 = mesh().m_edges[i][1];
-                    size_t v2 = mesh().get_third_vertex(i, f);
-
-                    Vec3d x0 = pos(v0);
-                    Vec3d x1 = pos(v1);
-                    Vec3d x2 = pos(v2);
-
-                    m_obefc.push_back((x0 + x1) / 2);
-                    m_obefe.push_back((x1 - x0).normalized());
-                    m_obefn.push_back((x1 - x0).cross(x2 - x0).normalized());
-                    ob.push_back(i);
-                    obv_set.insert(v0);
-                    obv_set.insert(v1);
-                }
-            }
-            else if (mesh().m_edge_to_triangle_map[i].size() == 1)
-            {
-                size_t f = mesh().m_edge_to_triangle_map[i][0];
-
-                size_t v0 = mesh().m_edges[i][0];
-                size_t v1 = mesh().m_edges[i][1];
-                size_t v2 = mesh().get_third_vertex(i, f);
-
-                Vec3d x0 = pos(v0);
-                Vec3d x1 = pos(v1);
-                Vec3d x2 = pos(v2);
-
-                m_obefc.push_back((x0 + x1) / 2);
-                m_obefe.push_back((x1 - x0).normalized());
-                m_obefn.push_back((x1 - x0).cross(x2 - x0).normalized());
-                ob.push_back(i);
-                obv_set.insert(v0);
-                obv_set.insert(v1);
-            }
-        }
-    }
-
+    std::vector<size_t> ob;
     std::vector<size_t> obv;
-    obv.assign(obv_set.begin(), obv_set.end());
-    assert(obv.size() == ob.size()); // assume the open boundary has simple topology
+    constructOpenBoundaryFaces(obv, ob);
     size_t nob = ob.size();
 
     if (nob > 0)
@@ -649,7 +548,7 @@ VS3D::step(double dt)
     {
         std::vector<Vec3d> constrained_vertex_normal(nc); // surface normals
         std::vector<size_t> relevant_constrained_vertices_global_indices(nc);
-        std::vector<double> target_normal_velocity;
+        std::vector<double> target_normal_velocity(nc);
         for (size_t i = 0; i < nc; i++)
         {
             size_t cv = m_constrained_vertices[relevant_constrained_vertices[i]];
@@ -692,7 +591,76 @@ VS3D::step(double dt)
 
     //    update_dbg_quantities();
 
+
+    std::cout << "StepExecution " << time_step_computation_duration.seconds() << std::endl;
     return (counter % 2 == 0 ? 0 : dt);
+}
+
+void VS3D::constructOpenBoundaryFaces(std::vector<size_t>& open_boundary_vertices, std::vector<size_t>& open_boundary_edges)
+{
+    // contruct the open boudnary extra faces
+    m_obefc.clear();
+    m_obefe.clear();
+    m_obefn.clear();
+    open_boundary_edges.clear();
+    std::set<size_t> obv_set; // open boundary vertices
+    for (size_t i = 0; i < mesh().ne(); i++)
+    {
+        if (surfTrack()->edge_is_all_solid(i)) // this is a constrained edge
+        {
+            // assert(mesh().m_edge_to_triangle_map[i].size() == 2);
+            if (mesh().m_edge_to_triangle_map[i].size() == 2)
+            {
+
+                size_t f0 = mesh().m_edge_to_triangle_map[i][0];
+                size_t f1 = mesh().m_edge_to_triangle_map[i][1];
+                bool s0 = surfTrack()->triangle_is_all_solid(f0);
+                bool s1 = surfTrack()->triangle_is_all_solid(f1);
+
+                if ((s0 && !s1) || (s1 && !s0)) // this is an open boundary edge
+                {
+                    size_t f = (s0 ? f1 : f0);
+
+                    size_t v0 = mesh().m_edges[i][0];
+                    size_t v1 = mesh().m_edges[i][1];
+                    size_t v2 = mesh().get_third_vertex(i, f);
+
+                    Vec3d x0 = pos(v0);
+                    Vec3d x1 = pos(v1);
+                    Vec3d x2 = pos(v2);
+
+                    m_obefc.push_back((x0 + x1) / 2);
+                    m_obefe.push_back((x1 - x0).normalized());
+                    m_obefn.push_back((x1 - x0).cross(x2 - x0).normalized());
+                    open_boundary_edges.push_back(i);
+                    obv_set.insert(v0);
+                    obv_set.insert(v1);
+                }
+            }
+            else if (mesh().m_edge_to_triangle_map[i].size() == 1)
+            {
+                size_t f = mesh().m_edge_to_triangle_map[i][0];
+
+                size_t v0 = mesh().m_edges[i][0];
+                size_t v1 = mesh().m_edges[i][1];
+                size_t v2 = mesh().get_third_vertex(i, f);
+
+                Vec3d x0 = pos(v0);
+                Vec3d x1 = pos(v1);
+                Vec3d x2 = pos(v2);
+
+                m_obefc.push_back((x0 + x1) / 2);
+                m_obefe.push_back((x1 - x0).normalized());
+                m_obefn.push_back((x1 - x0).cross(x2 - x0).normalized());
+                open_boundary_edges.push_back(i);
+                obv_set.insert(v0);
+                obv_set.insert(v1);
+            }
+        }
+    }
+
+    open_boundary_vertices.assign(obv_set.begin(), obv_set.end());
+    assert(open_boundary_vertices.size() == open_boundary_edges.size()); // assume the open boundary has simple topology
 }
 
 void
@@ -1004,6 +972,55 @@ VS3D::setGammas(const Vec2i& region_pair, const VecXd& gammas)
     }
 }
 
+void VS3D::shiftGammasToGlobalMean()
+{
+    MatXd means(m_nregion, m_nregion);
+    means.setZero();
+    Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic> counters(m_nregion, m_nregion);
+    counters.setZero();
+
+    for (size_t i = 0; i < mesh().nv(); i++)
+    {
+        std::set<Vec2i, Vec2iComp> region_pairs;
+        for (size_t j = 0; j < mesh().m_vertex_to_triangle_map[i].size(); j++)
+        {
+            LosTopos::Vec2i l = mesh().get_triangle_label(mesh().m_vertex_to_triangle_map[i][j]);
+            region_pairs.insert(l[0] < l[1] ? Vec2i(l[0], l[1]) : Vec2i(l[1], l[0]));
+        }
+
+        for (std::set<Vec2i, Vec2iComp>::iterator j = region_pairs.begin(); j != region_pairs.end();
+             j++)
+        {
+            Vec2i rp = *j;
+            means(rp[0], rp[1]) += (*m_Gamma)[i].get(rp);
+            counters(rp[0], rp[1])++;
+        }
+    }
+
+    for (int i = 0; i < m_nregion; i++)
+        for (int j = i + 1; j < m_nregion; j++)
+            if (counters(i, j) != 0)
+                means(i, j) /= counters(i, j);
+
+    for (size_t i = 0; i < mesh().nv(); i++)
+    {
+        std::set<Vec2i, Vec2iComp> region_pairs;
+        for (size_t j = 0; j < mesh().m_vertex_to_triangle_map[i].size(); j++)
+        {
+            LosTopos::Vec2i l = mesh().get_triangle_label(mesh().m_vertex_to_triangle_map[i][j]);
+            region_pairs.insert(l[0] < l[1] ? Vec2i(l[0], l[1]) : Vec2i(l[1], l[0]));
+        }
+
+        for (std::set<Vec2i, Vec2iComp>::iterator j = region_pairs.begin(); j != region_pairs.end();
+             j++)
+        {
+            Vec2i rp = *j;
+            (*m_Gamma)[i].set(rp, (*m_Gamma)[i].get(rp) - means(rp[0], rp[1]));
+        }
+    }
+
+}
+
 void
 VS3D::improveMesh(size_t number_iteration)
 {
@@ -1012,6 +1029,7 @@ VS3D::improveMesh(size_t number_iteration)
         m_st->topology_changes();
         m_st->improve_mesh();
     }
+
 
     // defrag the mesh in the end, to ensure the next step starts with a clean mesh
     m_st->defrag_mesh_from_scratch(m_constrained_vertices);
@@ -1248,6 +1266,31 @@ VS3D::getVertexOppositeEdgeInTriangle(size_t vertex_index, size_t triangle_index
 {
     LosTopos::Vec3st triangle = mesh().get_triangle(triangle_index);
     return pos(triangle[(vertex_index + 2) % 3]) - pos(triangle[(vertex_index + 1) % 3]);
+}
+
+std::vector<Vec3d> VS3D::getVerticesNormalsTowardRegion(int region) const
+{
+    std::vector<Vec3d> triangles_normals(mesh().nt(), Vec3d(0, 0, 0));
+    for (size_t i = 0; i < mesh().nt(); i++)
+    {
+        triangles_normals[i] = getTriangleNormalTowardRegion(i, region);
+    }
+
+    std::vector<Vec3d> vertices_normals(mesh().nv(), Vec3d(0, 0, 0));
+    for (size_t i = 0; i < mesh().nv(); i++)
+    {
+        for (size_t triangle_index : mesh().m_vertex_to_triangle_map[i])
+        {
+            vertices_normals[i] += triangles_normals[triangle_index];
+        }
+
+        if (!vertices_normals[i].isZero())
+        {
+            vertices_normals[i].normalize();
+        }
+    }
+
+    return vertices_normals;
 }
 
 Vec3d

@@ -101,6 +101,7 @@ class VS3D
 
     double step(double dt);
     void improveMesh(size_t number_iteration);
+    void constructOpenBoundaryFaces(std::vector<size_t>& open_boundary_vertices, std::vector<size_t>& open_boundary_edges);
     void smoothCirculation(double dt);
     void biharmonicSmoothing(double dt);
     void laplacianSmoothing(double dt);
@@ -213,6 +214,7 @@ class VS3D
      *  index to the one with higher index.
      */
     Vec3d getManifoldVertexNormal(size_t vertex_index) const;
+    std::vector<Vec3d> getVerticesNormalsTowardRegion(int region) const;
     Vec3d getTriangleNormalTowardRegion(size_t triangle_index, int region) const
     {
         return vc(surfTrack()->get_triangle_normal_by_region(triangle_index, region));
@@ -311,6 +313,9 @@ class VS3D
             const VecXd& gammas);
     void setGammas(const Vec2i& region_pair, const VecXd& gammas);
     void setGammas(size_t region_a_index, size_t region_b_index, const VecXd& gammas);
+
+    // shift all Gammas for each region pair to their global mean
+    void shiftGammasToGlobalMean();
 
   protected:
     void step_explicit(double dt);
