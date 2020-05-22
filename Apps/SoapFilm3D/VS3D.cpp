@@ -951,7 +951,7 @@ void
 VS3D::setGammas(const std::vector<std::pair<size_t, Vec2i>>& gamma_to_vertex_and_region_pair,
                 const VecXd& gammas)
 {
-    for (size_t gamma_index : boost::irange(gammas.size()))
+    for (size_t gamma_index : boost::irange(0lu, gammas.size()))
     {
         auto [vertex_index, region_pair] = gamma_to_vertex_and_region_pair[gamma_index];
         Gamma(vertex_index).set(region_pair, gammas[gamma_index]);
