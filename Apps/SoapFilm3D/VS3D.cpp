@@ -11,8 +11,8 @@
 #include "ADT/advec.h"
 #include "LinearizedImplicitEuler.h"
 #include "LosTopos/LosTopos3D/subdivisionscheme.h"
-#include "fmmtl/fmmtl/util/Clock.hpp"
 #include "SimOptions.h"
+#include "fmmtl/fmmtl/util/Clock.hpp"
 
 #include "LinearBendingForce.h"
 #include "SimpleGravityForce.h"
@@ -418,7 +418,6 @@ VS3D::step(double dt)
             }
         }*/
 
-
     std::vector<size_t> ob;
     std::vector<size_t> obv;
     constructOpenBoundaryFaces(obv, ob);
@@ -591,12 +590,13 @@ VS3D::step(double dt)
 
     //    update_dbg_quantities();
 
-
     std::cout << "StepExecution " << time_step_computation_duration.seconds() << std::endl;
     return (counter % 2 == 0 ? 0 : dt);
 }
 
-void VS3D::constructOpenBoundaryFaces(std::vector<size_t>& open_boundary_vertices, std::vector<size_t>& open_boundary_edges)
+void
+VS3D::constructOpenBoundaryFaces(std::vector<size_t>& open_boundary_vertices,
+                                 std::vector<size_t>& open_boundary_edges)
 {
     // contruct the open boudnary extra faces
     m_obefc.clear();
@@ -660,7 +660,8 @@ void VS3D::constructOpenBoundaryFaces(std::vector<size_t>& open_boundary_vertice
     }
 
     open_boundary_vertices.assign(obv_set.begin(), obv_set.end());
-    assert(open_boundary_vertices.size() == open_boundary_edges.size()); // assume the open boundary has simple topology
+    assert(open_boundary_vertices.size()
+           == open_boundary_edges.size()); // assume the open boundary has simple topology
 }
 
 void
@@ -972,7 +973,8 @@ VS3D::setGammas(const Vec2i& region_pair, const VecXd& gammas)
     }
 }
 
-void VS3D::shiftGammasToGlobalMean()
+void
+VS3D::shiftGammasToGlobalMean()
 {
     MatXd means(m_nregion, m_nregion);
     means.setZero();
@@ -1018,7 +1020,6 @@ void VS3D::shiftGammasToGlobalMean()
             (*m_Gamma)[i].set(rp, (*m_Gamma)[i].get(rp) - means(rp[0], rp[1]));
         }
     }
-
 }
 
 void
@@ -1029,7 +1030,6 @@ VS3D::improveMesh(size_t number_iteration)
         m_st->topology_changes();
         m_st->improve_mesh();
     }
-
 
     // defrag the mesh in the end, to ensure the next step starts with a clean mesh
     m_st->defrag_mesh_from_scratch(m_constrained_vertices);
@@ -1127,7 +1127,6 @@ VS3D::projectAirVelocity(const std::vector<Vec3d>& velocity, const std::vector<V
         right_hand_size.segment<3>(gammas.size() + velocity_index * 3) = velocity[velocity_index];
     }
 
-
     std::cout << "Starting Solve" << std::endl;
     SparseMatd system_matrix(system_size, system_size);
     system_matrix.setFromTriplets(triplets.begin(), triplets.end());
@@ -1153,7 +1152,7 @@ VS3D::getSheetStrengthToVelocityMatrix(const std::vector<Vec3d>& positions) cons
             Vec3d triangle_centre = getTriangleCenter(triangle_index);
             Vec3d grad_G = getGreensFunctionGradient(positions[velocity_index]
                                                      - getTriangleCenter(triangle_index));
-            matrix.block<3, 3>(velocity_index * 3, triangle_index * 3) = - skewSymmetric(grad_G);
+            matrix.block<3, 3>(velocity_index * 3, triangle_index * 3) = -skewSymmetric(grad_G);
         }
     }
     return matrix;
@@ -1268,7 +1267,8 @@ VS3D::getVertexOppositeEdgeInTriangle(size_t vertex_index, size_t triangle_index
     return pos(triangle[(vertex_index + 2) % 3]) - pos(triangle[(vertex_index + 1) % 3]);
 }
 
-std::vector<Vec3d> VS3D::getVerticesNormalsTowardRegion(int region) const
+std::vector<Vec3d>
+VS3D::getVerticesNormalsTowardRegion(int region) const
 {
     std::vector<Vec3d> triangles_normals(mesh().nt(), Vec3d(0, 0, 0));
     for (size_t i = 0; i < mesh().nt(); i++)
