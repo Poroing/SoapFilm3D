@@ -1819,47 +1819,214 @@ Scenes::sceneBubbleLattice(Sim* sim,
     return new VS3D(vs, fs, ls, cv, cx);
 }
 
-static size_t
-getWholeFoamSize(size_t number_bubbles)
+class MergedCubicBubblesFactory
 {
-    return static_cast<size_t>(std::ceil(std::cbrt(number_bubbles)));
-}
-
-static size_t
-getFoamVertexIndex(size_t i, size_t j, size_t k, size_t number_bubbles)
-{
-    size_t whole_foam_size = getWholeFoamSize(number_bubbles);
-    return i + j * (whole_foam_size + 1) + k * (whole_foam_size + 1) * (whole_foam_size + 1);
-}
-
-static size_t
-getBubbleIndex(size_t i, size_t j, size_t k, size_t number_bubbles)
-{
-    size_t whole_foam_size = getWholeFoamSize(number_bubbles);
-    return i + j * whole_foam_size + k * whole_foam_size * whole_foam_size;
-}
-
-static size_t
-isBubblePresent(size_t i, size_t j, size_t k, size_t number_bubbles)
-{
-    size_t whole_foam_size = static_cast<size_t>(std::ceil(std::cbrt(number_bubbles)));
-    if (i >= whole_foam_size || j >= whole_foam_size || k >= whole_foam_size
-        || getBubbleIndex(i, j, k, number_bubbles) >= number_bubbles)
+  public:
+    MergedCubicBubblesFactory(
+      const std::vector<std::vector<std::vector<bool>>>& merged_cubic_bubble_position,
+      double bubble_size)
     {
-        return false;
+        initializeRegion(merged_cubic_bubble_position);
+        initializeVertices(bubble_size);
+        initializeTriangles();
+        cleanVertices();
     }
-    return true;
-}
 
-static size_t
-getFoamBubbleRegion(size_t i, size_t j, size_t k, size_t number_bubbles)
-{
-    if (!isBubblePresent(i, j, k, number_bubbles))
+    void subdivide(size_t number_subdivisions)
     {
-        return 0;
+        for (size_t i : boost::irange(0lu, number_subdivisions))
+        {
+            ::subdivide(Vec3d(0, 0, 0), 0, m_vertices, m_triangles, m_triangles_labels);
+        }
     }
-    return 1 + getBubbleIndex(i, j, k, number_bubbles);
-}
+
+    void get(std::vector<LosTopos::Vec3d>& vertices,
+             std::vector<LosTopos::Vec3st>& triangles,
+             std::vector<LosTopos::Vec2i>& triangles_labels) const
+    {
+        convertToLosTopos(m_vertices, vertices);
+        convertToLosTopos(m_triangles, triangles);
+        convertToLosTopos(m_triangles_labels, triangles_labels);
+    }
+
+  private:
+    void initializeRegion(
+      const std::vector<std::vector<std::vector<bool>>>& merged_cubic_bubble_position)
+    {
+        m_i_size = 0;
+        m_j_size = 0;
+        m_k_size = 0;
+
+        m_i_size = merged_cubic_bubble_position.size();
+        m_region.resize(m_i_size);
+        int region = 1;
+        for (size_t i : boost::irange(0lu, merged_cubic_bubble_position.size()))
+        {
+            if (m_j_size == 0)
+            {
+                m_j_size = merged_cubic_bubble_position[i].size();
+            }
+            assert(m_j_size == merged_cubic_bubble_position[i].size());
+
+            m_region[i].resize(m_j_size);
+            for (size_t j : boost::irange(0lu, merged_cubic_bubble_position[i].size()))
+            {
+                if (m_k_size == 0)
+                {
+                    m_k_size = merged_cubic_bubble_position[i].size();
+                }
+                assert(m_k_size == merged_cubic_bubble_position[i].size());
+
+                m_region[i][j].resize(m_k_size, 0);
+                for (size_t k : boost::irange(0lu, merged_cubic_bubble_position[i][j].size()))
+                {
+                    if (merged_cubic_bubble_position[i][j][k])
+                    {
+                        m_region[i][j][k] = region;
+                        ++region;
+                    }
+                }
+            }
+        }
+    }
+
+    void initializeVertices(double bubble_size)
+    {
+        for (size_t i : boost::irange(0lu, m_i_size + 1))
+        {
+            for (size_t j : boost::irange(0lu, m_j_size + 1))
+            {
+                for (size_t k : boost::irange(0lu, m_k_size + 1))
+                {
+                    m_vertices.push_back(bubble_size * Vec3d(i, j, k));
+                }
+            }
+        }
+    }
+
+    void initializeTriangles()
+    {
+        size_t vertex_0, vertex_1, vertex_2, vertex_3, vertex_4, vertex_5, vertex_6;
+        int region, region_i, region_j, region_k;
+        for (std::size_t i : boost::irange(0lu, m_i_size + 1))
+        {
+            for (std::size_t j : boost::irange(0lu, m_j_size + 1))
+            {
+                for (std::size_t k : boost::irange(0lu, m_k_size + 1))
+                {
+                    vertex_0 = getVertexIndex(i, j, k);
+                    vertex_1 = getVertexIndex(i + 1, j, k);
+                    vertex_2 = getVertexIndex(i, j + 1, k);
+                    vertex_3 = getVertexIndex(i + 1, j + 1, k);
+                    vertex_4 = getVertexIndex(i, j, k + 1);
+                    vertex_5 = getVertexIndex(i + 1, j, k + 1);
+                    vertex_6 = getVertexIndex(i, j + 1, k + 1);
+
+                    region = getRegion(i, j, k);
+                    region_i = getINeighboorRegion(i, j, k);
+                    region_j = getJNeighboorRegion(i, j, k);
+                    region_k = getKNeighboorRegion(i, j, k);
+
+                    if (region != region_k)
+                    {
+                        m_triangles.emplace_back(vertex_0, vertex_1, vertex_2);
+                        m_triangles_labels.emplace_back(region, region_k);
+                        m_triangles.emplace_back(vertex_1, vertex_3, vertex_2);
+                        m_triangles_labels.emplace_back(region, region_k);
+                    }
+
+                    if (region != region_i)
+                    {
+                        m_triangles.emplace_back(vertex_0, vertex_2, vertex_4);
+                        m_triangles_labels.emplace_back(region, region_i);
+                        m_triangles.emplace_back(vertex_2, vertex_6, vertex_4);
+                        m_triangles_labels.emplace_back(region, region_i);
+                    }
+
+                    if (region != region_j)
+                    {
+                        m_triangles.emplace_back(vertex_0, vertex_4, vertex_5);
+                        m_triangles_labels.emplace_back(region, region_j);
+                        m_triangles.emplace_back(vertex_0, vertex_5, vertex_1);
+                        m_triangles_labels.emplace_back(region, region_j);
+                    }
+                }
+            }
+        }
+    }
+
+    void cleanVertices()
+    {
+        std::vector<int> mapping(m_vertices.size(), -1);
+        std::vector<Vec3d> new_vertices;
+        int new_index = 0;
+        for (Vec3i& triangle : m_triangles)
+        {
+            for (size_t i : boost::irange((Vec3i::Index)0, triangle.size()))
+            {
+                if (mapping[triangle[i]] == -1)
+                {
+                    mapping[triangle[i]] = new_index;
+                    new_vertices.push_back(m_vertices[triangle[i]]);
+                    ++new_index;
+                }
+                triangle[i] = mapping[triangle[i]];
+            }
+        }
+        m_vertices = new_vertices;
+    }
+
+    size_t getVertexIndex(size_t i, size_t j, size_t k) const
+    {
+        return i * (m_j_size + 1) * (m_k_size + 1) + j * (m_k_size + 1) + k;
+    }
+
+    int getINeighboorRegion(size_t i, size_t j, size_t k) const
+    {
+        if (i == 0)
+        {
+            return 0;
+        }
+
+        return getRegion(i - 1, j, k);
+    }
+
+    int getJNeighboorRegion(size_t i, size_t j, size_t k) const
+    {
+        if (j == 0)
+        {
+            return 0;
+        }
+
+        return getRegion(i, j - 1, k);
+    }
+
+    int getKNeighboorRegion(size_t i, size_t j, size_t k) const
+    {
+        if (k == 0)
+        {
+            return 0;
+        }
+
+        return getRegion(i, j, k - 1);
+    }
+
+    int getRegion(size_t i, size_t j, size_t k) const
+    {
+        if (i >= m_i_size || j >= m_j_size || k >= m_k_size)
+        {
+            return 0;
+        }
+
+        return m_region[i][j][k];
+    }
+
+    std::vector<std::vector<std::vector<int>>> m_region;
+    std::vector<Vec3d> m_vertices;
+    std::vector<Vec3i> m_triangles;
+    std::vector<Vec2i> m_triangles_labels;
+    size_t m_i_size, m_j_size, m_k_size;
+};
 
 VS3D*
 Scenes::sceneMergedBubbleLattice(Sim* sim,
@@ -1869,139 +2036,34 @@ Scenes::sceneMergedBubbleLattice(Sim* sim,
                                  std::vector<size_t>& cv,
                                  std::vector<Vec3d>& cx)
 {
-    std::size_t number_subdivision = Options::intValue("mesh-size-n");
+    std::size_t number_subdivisions = Options::intValue("mesh-size-n");
     std::size_t number_bubbles = Options::intValue("mesh-size-m");
+    std::size_t whole_foam_size = static_cast<size_t>(std::ceil(std::cbrt(number_bubbles)));
     double bubble_size = 1.;
 
-    size_t whole_foam_size = getWholeFoamSize(number_bubbles);
+    std::vector<std::vector<std::vector<bool>>> bubble_positions(
+      whole_foam_size,
+      std::vector<std::vector<bool>>(whole_foam_size, std::vector<bool>(whole_foam_size, false)));
 
-    std::vector<Vec3d> vertices;
-    vertices.reserve((whole_foam_size + 1) * (whole_foam_size + 1) * (whole_foam_size + 1));
-
-    for (std::size_t k : boost::irange(0lu, whole_foam_size + 1))
+    size_t bubble_index = 0;
+    for (size_t i : boost::irange(0lu, whole_foam_size))
     {
-        for (std::size_t j : boost::irange(0lu, whole_foam_size + 1))
+        for (size_t j : boost::irange(0lu, whole_foam_size))
         {
-            for (std::size_t i : boost::irange(0lu, whole_foam_size + 1))
+            for (size_t k : boost::irange(0lu, whole_foam_size))
             {
-                vertices.push_back(bubble_size * Vec3d(i, j, k));
-            }
-        }
-    }
-
-    // Every triangles except the one that are the farthest in the positive x, y and z direction.
-    std::vector<Vec3i> triangles;
-    std::vector<Vec2i> triangle_labels;
-    std::size_t vertex_0, vertex_1, vertex_2, vertex_3, vertex_4, vertex_5, vertex_6;
-    std::size_t region_i, region_j, region_k, region;
-    for (std::size_t k : boost::irange(0lu, whole_foam_size))
-    {
-        for (std::size_t j : boost::irange(0lu, whole_foam_size))
-        {
-            for (std::size_t i : boost::irange(0lu, whole_foam_size))
-            {
-                vertex_0 = getFoamVertexIndex(i, j, k, number_bubbles);
-                vertex_1 = getFoamVertexIndex(i + 1, j, k, number_bubbles);
-                vertex_2 = getFoamVertexIndex(i, j + 1, k, number_bubbles);
-                vertex_3 = getFoamVertexIndex(i + 1, j + 1, k, number_bubbles);
-                vertex_4 = getFoamVertexIndex(i, j, k + 1, number_bubbles);
-                vertex_5 = getFoamVertexIndex(i + 1, j, k + 1, number_bubbles);
-                vertex_6 = getFoamVertexIndex(i, j + 1, k + 1, number_bubbles);
-
-                region = getFoamBubbleRegion(i, j, k, number_bubbles);
-                region_i = (i == 0) ? 0 : getFoamBubbleRegion(i - 1, j, k, number_bubbles);
-                region_j = (j == 0) ? 0 : getFoamBubbleRegion(i, j - 1, k, number_bubbles);
-                region_k = (k == 0) ? 0 : getFoamBubbleRegion(i, j, k - 1, number_bubbles);
-
-                if (region != region_k)
+                if (bubble_index < number_bubbles)
                 {
-                    triangles.emplace_back(vertex_0, vertex_1, vertex_2);
-                    triangle_labels.emplace_back(region, region_k);
-                    triangles.emplace_back(vertex_1, vertex_3, vertex_2);
-                    triangle_labels.emplace_back(region, region_k);
-                }
-
-                if (region != region_i)
-                {
-                    triangles.emplace_back(vertex_0, vertex_2, vertex_4);
-                    triangle_labels.emplace_back(region, region_i);
-                    triangles.emplace_back(vertex_2, vertex_6, vertex_4);
-                    triangle_labels.emplace_back(region, region_i);
-                }
-
-                if (region != region_j)
-                {
-                    triangles.emplace_back(vertex_0, vertex_4, vertex_5);
-                    triangle_labels.emplace_back(region, region_j);
-                    triangles.emplace_back(vertex_0, vertex_5, vertex_1);
-                    triangle_labels.emplace_back(region, region_j);
+                    bubble_positions[i][j][k] = true;
+                    ++bubble_index;
                 }
             }
         }
     }
 
-    // The other triangles.
-    for (std::size_t ijk_1 : boost::irange(0lu, whole_foam_size))
-    {
-        for (std::size_t ijk_2 : boost::irange(0lu, whole_foam_size))
-        {
-            // z direction
-            vertex_0 = getFoamVertexIndex(ijk_1, ijk_2, whole_foam_size, number_bubbles);
-            vertex_1 = getFoamVertexIndex(ijk_1 + 1, ijk_2, whole_foam_size, number_bubbles);
-            vertex_2 = getFoamVertexIndex(ijk_1, ijk_2 + 1, whole_foam_size, number_bubbles);
-            vertex_3 = getFoamVertexIndex(ijk_1 + 1, ijk_2 + 1, whole_foam_size, number_bubbles);
-            region = getFoamBubbleRegion(ijk_1, ijk_2, whole_foam_size - 1, number_bubbles);
-
-            if (region != 0)
-            {
-                triangles.emplace_back(vertex_0, vertex_3, vertex_1);
-                triangle_labels.emplace_back(region, 0);
-                triangles.emplace_back(vertex_0, vertex_2, vertex_3);
-                triangle_labels.emplace_back(region, 0);
-            }
-
-            // y direction
-            vertex_0 = getFoamVertexIndex(ijk_1, whole_foam_size, ijk_2, number_bubbles);
-            vertex_1 = getFoamVertexIndex(ijk_1 + 1, whole_foam_size, ijk_2, number_bubbles);
-            vertex_2 = getFoamVertexIndex(ijk_1, whole_foam_size, ijk_2 + 1, number_bubbles);
-            vertex_3 = getFoamVertexIndex(ijk_1 + 1, whole_foam_size, ijk_2 + 1, number_bubbles);
-            region = getFoamBubbleRegion(ijk_1, whole_foam_size - 1, ijk_2, number_bubbles);
-
-            if (region != 0)
-            {
-                triangles.emplace_back(vertex_0, vertex_1, vertex_3);
-                triangle_labels.emplace_back(region, 0);
-                triangles.emplace_back(vertex_0, vertex_3, vertex_2);
-                triangle_labels.emplace_back(region, 0);
-            }
-
-            // x direction
-            vertex_0 = getFoamVertexIndex(whole_foam_size, ijk_1, ijk_2, number_bubbles);
-            vertex_1 = getFoamVertexIndex(whole_foam_size, ijk_1 + 1, ijk_2, number_bubbles);
-            vertex_2 = getFoamVertexIndex(whole_foam_size, ijk_1, ijk_2 + 1, number_bubbles);
-            vertex_3 = getFoamVertexIndex(whole_foam_size, ijk_1 + 1, ijk_2 + 1, number_bubbles);
-            region = getFoamBubbleRegion(whole_foam_size - 1, ijk_1, ijk_2, number_bubbles);
-
-            if (region != 0)
-            {
-                triangles.emplace_back(vertex_0, vertex_3, vertex_1);
-                triangle_labels.emplace_back(region, 0);
-                triangles.emplace_back(vertex_0, vertex_2, vertex_3);
-                triangle_labels.emplace_back(region, 0);
-            }
-        }
-    }
-
-    std::size_t number_subdivisions = Options::intValue("mesh-size-n");
-    for (std::size_t dummy : boost::irange(0lu, number_subdivisions))
-    {
-        subdivide(Vec3d(0, 0, 0), 0, vertices, triangles, triangle_labels);
-    }
-
-    convertToLosTopos(vertices, vs);
-    convertToLosTopos(triangles, fs);
-    convertToLosTopos(triangle_labels, ls);
-
+    MergedCubicBubblesFactory factory(bubble_positions, bubble_size);
+    factory.subdivide(number_subdivisions);
+    factory.get(vs, fs, ls);
     return new VS3D(vs, fs, ls, cv, cx);
 }
 
@@ -2395,11 +2457,10 @@ Scenes::sceneNewFoam(Sim* sim,
     double bubble_radius = 1.;
     double cube_size = bubble_radius * (std::cbrt(M) / 0.56);
     std::vector<std::pair<Vec3d, double>> spheres =
-      getRandomNonIntersectingSpheres(
-              std::uniform_real_distribution(bubble_radius, bubble_radius),
-                       std::uniform_real_distribution(0., cube_size),
-                       M,
-                       1000u);
+      getRandomNonIntersectingSpheres(std::uniform_real_distribution(bubble_radius, bubble_radius),
+                                      std::uniform_real_distribution(0., cube_size),
+                                      M,
+                                      1000u);
 
     if (spheres.size() < M)
     {
@@ -2432,9 +2493,44 @@ Scenes::sceneNewFoam(Sim* sim,
     convertToLosTopos(l_all, ls);
 
     VS3D* result = new VS3D(vs, fs, ls, cv, cx);
-    growBubbleTowardRegionZero(
-      *result, 0.2 * bubble_radius + getMaximumDistanceOfOneSphereToOthers(spheres), 0.1 * bubble_radius);
+    growBubbleTowardRegionZero(*result,
+                               0.2 * bubble_radius + getMaximumDistanceOfOneSphereToOthers(spheres),
+                               0.1 * bubble_radius);
     return result;
+}
+
+VS3D*
+Scenes::scene2DBubbleLattice(Sim* sim,
+                             std::vector<LosTopos::Vec3d>& vs,
+                             std::vector<LosTopos::Vec3st>& fs,
+                             std::vector<LosTopos::Vec2i>& ls,
+                             std::vector<size_t>& cv,
+                             std::vector<Vec3d>& cx)
+{
+    std::size_t number_subdivisions = Options::intValue("mesh-size-n");
+    std::size_t number_bubbles = Options::intValue("mesh-size-m");
+    std::size_t whole_foam_size = static_cast<size_t>(std::ceil(std::sqrt(number_bubbles)));
+    double bubble_size = 1.;
+
+    std::vector<std::vector<std::vector<bool>>> bubble_positions(
+            whole_foam_size, std::vector<std::vector<bool>>(whole_foam_size, std::vector<bool>(1, false)));
+    size_t bubble_index = 0;
+    for (size_t i : boost::irange(0lu, whole_foam_size))
+    {
+        for (size_t j : boost::irange(0lu, whole_foam_size))
+        {
+            if (bubble_index < number_bubbles)
+            {
+                bubble_positions[i][j][0] = true;
+                ++bubble_index;
+            }
+        }
+    }
+
+    MergedCubicBubblesFactory factory(bubble_positions, bubble_size);
+    factory.subdivide(number_subdivisions);
+    factory.get(vs, fs, ls);
+    return new VS3D(vs, fs, ls, cv, cx);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2819,4 +2915,8 @@ Scenes::stepNewFoam(double dt, Sim* sim, VS3D* vs)
 {
 }
 
+void
+Scenes::step2DBubbleLattice(double dt, Sim* sim, VS3D* vs)
+{
+}
 
