@@ -2323,10 +2323,10 @@ Scenes::sceneStraws(Sim* sim,
     {
         for (size_t j : boost::irange(0lu, size_straw_lattice + 1))
         {
-            vertices.push_back(i * Vec3d(L, 0, 0) + j * Vec3d(0, l + straw_radius, 0));
-            vertices.push_back(i * Vec3d(L, 0, 0) + j * Vec3d(0, l + straw_radius, 0)
+            vertices.push_back(i * Vec3d(0, 0, L) + j * Vec3d(0, l + straw_radius, 0));
+            vertices.push_back(i * Vec3d(0, 0, L) + j * Vec3d(0, l + straw_radius, 0)
                                + Vec3d(0, l, 0));
-            vertices.push_back(i * Vec3d(L, 0, 0) + j * Vec3d(0, l + straw_radius, 0)
+            vertices.push_back(i * Vec3d(0, 0, L) + j * Vec3d(0, l + straw_radius, 0)
                                + Vec3d(0, l + straw_radius / 2, 0));
         }
     }
@@ -2336,7 +2336,7 @@ Scenes::sceneStraws(Sim* sim,
         for (size_t j : boost::irange(0lu, size_straw_lattice))
         {
             vertices.push_back(vertices[getHexagonCenterIndex(i, j, size_straw_lattice)]
-                               + Vec3d(0, 0, -straw_radius));
+                               + Vec3d(-straw_radius, 0, 0));
         }
     }
 
@@ -2907,7 +2907,7 @@ void
 Scenes::stepStraws(double dt, Sim* sim, VS3D* vs)
 {
     for (size_t i = 0; i < vs->m_constrained_vertices.size(); i++)
-        vs->m_constrained_positions[i] += Vec3d(0, 0, -3) * dt;
+        vs->m_constrained_positions[i] += Vec3d(-1, 0, 0) * dt;
 }
 
 void
