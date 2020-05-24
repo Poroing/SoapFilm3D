@@ -7,6 +7,7 @@ import shutil
 import csv
 import itertools
 import functools
+import time
 
 class SoapFilmSimulationConfigFile(object):
 
@@ -287,6 +288,7 @@ if  __name__ == '__main__':
             ' correctly.')
     argument_parser.add_argument('--timeout', type=float,
             help='Stops each simulation after TIMEOUT seconds.')
+    argument_parser.add_argument('--global-timeout', type=float)
     argument_parser.add_argument('output_directory')
     args = argument_parser.parse_args()
 
@@ -311,7 +313,15 @@ if  __name__ == '__main__':
         values = values.split(',')
         simulation_parameter_product.addOptions(key, values)
 
+    end_time = None
+    if args.global_timeout is not None:
+        end_time = time.time() + args.global_timeout
+
     for path, options in simulation_parameter_product:
+        if time.time() > end_time:
+            print('Global timeout attained')
+            break
+
         print(f'Starting simulation with options {options}.')
         experiment_path = pathlib.Path(args.output_directory) / path
 
@@ -319,13 +329,20 @@ if  __name__ == '__main__':
             config.load_dir = pathlib.Path(args.load) / path / 'output'
         config.update(options)
 
+        if args.timeout is not None and args.global_timeout is not None:
+            timeout = min(args.timeout, end_time - time.time())
+        elif args.timeout is not None:
+            timeout = args.timeout
+        elif args.global_timeout is not None:
+            timeout = end_time - time.time()
+
         simulation = SoapFilmSimulation(
                 experiment_path,
                 delete_existing=True,
                 capture_stdout=not args.no_save_stdout,
                 config=config,
                 headless=not args.no_headless,
-                timeout=args.timeout,
+                timeout=timeout,
                 retry_on_failed_initialization=args.retry_on_failed_initialization,
                 retry_on_not_enough_spheres=args.retry_on_not_enough_spheres)
 
