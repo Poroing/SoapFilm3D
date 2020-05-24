@@ -318,7 +318,7 @@ if  __name__ == '__main__':
         end_time = time.time() + args.global_timeout
 
     for path, options in simulation_parameter_product:
-        if time.time() > end_time:
+        if end_time is not None and time.time() > end_time:
             print('Global timeout attained')
             break
 
@@ -329,6 +329,7 @@ if  __name__ == '__main__':
             config.load_dir = pathlib.Path(args.load) / path / 'output'
         config.update(options)
 
+        timeout = None
         if args.timeout is not None and args.global_timeout is not None:
             timeout = min(args.timeout, end_time - time.time())
         elif args.timeout is not None:
