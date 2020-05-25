@@ -92,6 +92,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addIntegerOption("remeshing-iterations", 1);
     Options::addIntegerOption("initial-remeshing-iterations", 1);
 
+    Options::addIntegerOption("lostopos-maximum-timestep-cuts", std::numeric_limits<int>::max());
     Options::addDoubleOption("lostopos-collision-epsilon-fraction",
                              1e-4); // lostopos collision epsilon (fraction of mean edge length)
     Options::addDoubleOption(

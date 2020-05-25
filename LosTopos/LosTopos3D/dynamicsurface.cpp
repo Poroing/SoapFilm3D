@@ -64,10 +64,12 @@ DynamicSurface::DynamicSurface( const std::vector<Vec3d>& vertex_positions,
                                double in_proximity_epsilon,
                                double in_friction_coefficient,
                                bool in_collision_safety,
-                               bool in_verbose ) :
+                               bool in_verbose,
+                               size_t maximum_timestep_cuts) :
 m_proximity_epsilon( in_proximity_epsilon ),
 m_verbose( in_verbose ),   
 m_collision_safety( in_collision_safety ),
+m_maximum_timestep_cuts( maximum_timestep_cuts ),
 m_masses( masses ), 
 m_mesh(), 
 m_broad_phase( new BroadPhaseGrid() ),
@@ -768,10 +770,11 @@ void DynamicSurface::integrate( double desired_dt, double& actual_dt )
     
     double curr_dt = desired_dt;
     bool success = false;
+    size_t number_cuts = 0;
     
     const std::vector<Vec3d> saved_predicted_positions = get_newpositions();
     
-    while ( !success )
+    while ( !success && number_cuts < m_maximum_timestep_cuts)
     {
         
         m_velocities.resize( get_num_vertices() );
@@ -823,6 +826,7 @@ void DynamicSurface::integrate( double desired_dt, double& actual_dt )
                 // back up and try again:
                 
                 curr_dt = 0.5 * curr_dt;
+                ++number_cuts;
                 for ( size_t i = 0; i < get_num_vertices(); ++i )
                 {
                     set_newposition(i, get_position(i) + 0.5 * (saved_predicted_positions[i] - get_position(i)) ) ;
@@ -854,6 +858,7 @@ void DynamicSurface::integrate( double desired_dt, double& actual_dt )
                 // back up and try again:
                 
                 curr_dt = 0.5 * curr_dt;
+                ++number_cuts;
                 for ( size_t i = 0; i < get_num_vertices(); ++i )
                 {
                     set_newposition( i, get_position(i) + 0.5 * ( saved_predicted_positions[i] - get_position(i) ) );
@@ -864,7 +869,7 @@ void DynamicSurface::integrate( double desired_dt, double& actual_dt )
             }                 
             
         }
-        
+
         // Set m_positions
         set_positions_to_newpositions();
         

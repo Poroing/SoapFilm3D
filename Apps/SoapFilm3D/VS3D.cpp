@@ -109,6 +109,7 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     params.m_t1_transition_enabled = Options::boolValue("lostopos-t1-transition-enabled");
     params.m_pull_apart_distance =
       Options::doubleValue("lostopos-t1-pull-apart-distance-fraction") * mean_edge_len;
+    params.m_maximum_timestep_cuts = Options::intValue("lostopos-maximum-timestep-cuts");
 
     params.m_velocity_field_callback = NULL;
 

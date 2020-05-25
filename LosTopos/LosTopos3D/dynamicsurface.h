@@ -87,7 +87,8 @@ public:
        double in_proximity_epsilon = 1e-4,
        double in_friction_coefficient = 0.0,
        bool in_collision_safety = true,
-       bool in_verbose = false );
+       bool in_verbose = false,
+       size_t maximum_timestep_cuts = std::numeric_limits<size_t>::max() );
     
     /// Destructor
     /// 
@@ -432,6 +433,8 @@ public:
     /// Ensure that no mesh elements intersect, during mesh moving and mesh maintenance
     ///
     bool m_collision_safety;
+
+    size_t m_maximum_timestep_cuts;
     
     /// Vertex positions, predicted locations, velocities and masses
     ///

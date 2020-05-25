@@ -164,6 +164,8 @@ struct SurfTrackInitializationParameters
     /// Whether to be verbose in outputting data
     ///
     bool m_verbose;
+
+    size_t m_maximum_timestep_cuts;
     
 };
 
