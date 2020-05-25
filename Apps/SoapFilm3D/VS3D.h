@@ -79,10 +79,12 @@ class VS3D
         double density;
         double stretching;
         double bending;
+        size_t maximum_consecutive_timestep_with_collisions;
 
         SimOptions()
           : implicit(false), pbd(false), smoothing_coef(0), damping_coef(1), sigma(1), gravity(0),
-            smoothing_type(SmoothingType::LAPLACIAN)
+            smoothing_type(SmoothingType::LAPLACIAN),
+            maximum_consecutive_timestep_with_collisions(std::numeric_limits<size_t>::max())
         {
         }
     };
@@ -391,6 +393,7 @@ class VS3D
 
   protected:
     LosTopos::SurfTrack* m_st;
+    size_t m_number_consecutive_timestep_with_collisions;
 
     SimOptions m_sim_options;
     double m_delta; // Biot-Savart regularization parameter

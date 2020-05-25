@@ -110,6 +110,8 @@ public:
     /// 
     virtual void integrate( double dt, double& actual_dt );
 
+    bool integrationAddCollisions() const { return m_integration_add_collisions;}
+
     //
     // Utility
     //
@@ -459,6 +461,8 @@ public:
     /// Angle threshold for declaring an edge to be a feature
     ///
     double m_feature_edge_angle_threshold;
+
+    double m_integration_add_collisions;
 
 public:
   
