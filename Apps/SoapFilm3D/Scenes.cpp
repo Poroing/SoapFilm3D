@@ -2310,7 +2310,8 @@ Scenes::sceneStraws(Sim* sim,
                     std::vector<size_t>& cv,
                     std::vector<Vec3d>& cx)
 {
-    size_t size_straw_lattice = Options::intValue("mesh-size-m");
+    size_t number_straws = Options::intValue("mesh-size-m");
+    size_t size_straw_lattice = static_cast<size_t>(std::ceil(std::sqrt(number_straws)));
     double straw_radius = 1.0;
 
     std::vector<Vec3d> vertices;
@@ -2341,10 +2342,16 @@ Scenes::sceneStraws(Sim* sim,
     }
 
     std::vector<std::vector<std::pair<size_t, size_t>>> vertex_to_triangle_map(vertices.size());
+    size_t bubble_index = 0;
     for (size_t i : boost::irange(0lu, size_straw_lattice))
     {
         for (size_t j : boost::irange(0lu, size_straw_lattice))
         {
+            if (bubble_index >= number_straws)
+            {
+                continue;
+            }
+
             for (size_t vertex_index : boost::irange(0lu, 6lu))
             {
                 triangles.emplace_back(
@@ -2358,6 +2365,7 @@ Scenes::sceneStraws(Sim* sim,
                   getHexagonVertexIndex((vertex_index + 1) % 6, i, j, size_straw_lattice));
                 triangles_labels.emplace_back(0, getHexagonRegion(i, j, size_straw_lattice));
             }
+            ++bubble_index;
         }
     }
 
@@ -2392,16 +2400,23 @@ Scenes::sceneStraws(Sim* sim,
         }
     }
 
+    bubble_index = 0;
     for (size_t i : boost::irange(0lu, size_straw_lattice))
     {
         for (size_t j : boost::irange(0lu, size_straw_lattice))
         {
+            if (bubble_index >= number_straws)
+            {
+                continue;
+            }
+
             cv.push_back(mapping[getHexagonBackCenterIndex(i, j, size_straw_lattice)]);
             for (size_t vertex_index : boost::irange(0lu, 6lu))
             {
                 cv.push_back(
                   mapping[getHexagonVertexIndex(vertex_index, i, j, size_straw_lattice)]);
             }
+            ++bubble_index;
         }
     }
     std::sort(cv.begin(), cv.end());
