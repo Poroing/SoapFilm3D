@@ -40,6 +40,7 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
            const std::vector<Vec3d>& constrained_positions,
            const std::vector<Vec3d>& constrained_velocities,
            const std::vector<unsigned char>& constrained_fixed)
+  : m_number_consecutive_timestep_with_collisions(0)
 {
     // load sim options
     m_sim_options.implicit = Options::boolValue("implicit-integration");
@@ -65,6 +66,8 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     m_sim_options.density = Options::doubleValue("density");
     m_sim_options.stretching = Options::doubleValue("stretching");
     m_sim_options.bending = Options::doubleValue("bending");
+    m_sim_options.maximum_consecutive_timestep_with_collisions =
+      Options::intValue("maximum-consecutive-timestep-with-collisions");
 
     // construct the surface tracker
     double mean_edge_len = Options::doubleValue("remeshing-resolution");
@@ -587,6 +590,18 @@ VS3D::step(double dt)
             std::cout
               << "Warning: SurfTrack::integrate() failed to step the full length of the time step!"
               << std::endl;
+        if (m_st->integrationAddCollisions())
+        {
+            ++m_number_consecutive_timestep_with_collisions;
+            if (m_number_consecutive_timestep_with_collisions > m_sim_options.maximum_consecutive_timestep_with_collisions)
+            {
+                throw std::runtime_error("Too much consecutive timesteps with collisions");
+            }
+        }
+        else
+        {
+            m_number_consecutive_timestep_with_collisions = 0;
+        }
     }
 
     //    update_dbg_quantities();

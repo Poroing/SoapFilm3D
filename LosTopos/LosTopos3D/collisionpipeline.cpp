@@ -1170,7 +1170,7 @@ bool CollisionPipeline::handle_collisions(double dt)
                                             status );
         
         collision_found |= status.collision_found;
-        
+
         if ( status.overflow )
         {
             if ( verbose )
@@ -1187,6 +1187,10 @@ bool CollisionPipeline::handle_collisions(double dt)
                 std::cout << "no collision found this pass, returning early" << std::endl;
             }
             return true;
+        }
+        else
+        {
+            m_surface.m_integration_add_collisions = true;
         }
         
         if ( verbose )

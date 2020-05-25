@@ -91,6 +91,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("remeshing-resolution", 0.1);
     Options::addIntegerOption("remeshing-iterations", 1);
     Options::addIntegerOption("initial-remeshing-iterations", 1);
+    Options::addIntegerOption("maximum-consecutive-timestep-with-collisions", std::numeric_limits<int>::max());
 
     Options::addIntegerOption("lostopos-maximum-timestep-cuts", std::numeric_limits<int>::max());
     Options::addDoubleOption("lostopos-collision-epsilon-fraction",
