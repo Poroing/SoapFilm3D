@@ -299,6 +299,15 @@ class CsvMeanNumberVertices(Csv):
         mean_bubble_number_vertices = sum(bubble_number_vertices) / len(bubble_number_vertices)
         return 'MeanBubbleNumberVertices', mean_bubble_number_vertices
 
+class CsvTimeStepExecutionTime(CsvExecutionTime):
+
+    def run(self, path, config):
+        self.total_biot_savart_execution_time = 0
+        super().run(path, config)
+
+
+    def processLine(self, line_tokens):
+        name, value = super().processLine(line_tokens)
 
 
 class Video(Process):
