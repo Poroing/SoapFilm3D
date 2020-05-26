@@ -8,6 +8,7 @@ import csv
 import itertools
 import functools
 import time
+import collections
 
 class FailedSimulation(Exception):
 
@@ -72,6 +73,9 @@ class SoapFilmSimulationConfigFile(object):
                     config_object.writerow((key, str(int(value))))
                 else:
                     config_object.writerow((key, str(value)))
+
+def isGlobalTimeoutReached(end_time):
+    return end_time is not None and time.time() > end_time
 
 
 
@@ -309,6 +313,10 @@ if  __name__ == '__main__':
     argument_parser.add_argument('--timeout', type=float,
             help='Stops each simulation after TIMEOUT seconds.')
     argument_parser.add_argument('--global-timeout', type=float)
+    argument_parser.add_argument('--unstability-algorithm', type=int, metavar='N',
+            help='Starts with the given simulation timeout and double the timeout each time '
+                'N consecutive simulation timeout. This allows to run as many simulation as you '
+                'want without unstable taking all the allocated time.')
     argument_parser.add_argument('output_directory')
     args = argument_parser.parse_args()
 
@@ -321,6 +329,11 @@ if  __name__ == '__main__':
         config = SoapFilmSimulationConfigFile.fromConfigFile(args.config)
     else:
         config = SoapFilmSimulationConfigFile()
+
+    if args.unstability_algorithm is not None and args.timeout is None:
+        print('--unstability-algorithm needs the --timeout argument')
+        exit(1)
+
 
     config.output_mesh = args.save_mesh
     config.output_mesh_every_n_frames = args.save_mesh_period
@@ -337,10 +350,24 @@ if  __name__ == '__main__':
     if args.global_timeout is not None:
         end_time = time.time() + args.global_timeout
 
-    for path, options in simulation_parameter_product:
-        if end_time is not None and time.time() > end_time:
+    simulation_timeout = args.timeout
+
+    last_timedout_simulations_parameter = collections.deque()
+    simulation_parameter_to_rerun = collections.deque()
+    simulation_parameter_iterator = iter(simulation_parameter_product)
+
+    while True:
+        if isGlobalTimeoutReached(end_time):
             print('Global timeout attained')
             break
+
+        if len(simulation_parameter_to_rerun) > 0:
+            path, options = simulation_parameter_to_rerun.popleft()
+        else:
+            try:
+                path, options = next(simulation_parameter_iterator)
+            except StopIteration:
+                break
 
         print(f'Starting simulation with options {options}.')
         experiment_path = pathlib.Path(args.output_directory) / path
@@ -351,9 +378,9 @@ if  __name__ == '__main__':
 
         timeout = None
         if args.timeout is not None and args.global_timeout is not None:
-            timeout = min(args.timeout, end_time - time.time())
+            timeout = min(simulation_timeout, end_time - time.time())
         elif args.timeout is not None:
-            timeout = args.timeout
+            timeout = simulation_timeout
         elif args.global_timeout is not None:
             timeout = end_time - time.time()
 
@@ -372,6 +399,7 @@ if  __name__ == '__main__':
 
         try:
             stdout = simulation.run()
+            last_timedout_simulations_parameter.clear()
         except FailedSimulation as e:
             (experiment_path / 'error').touch()
             stdout = e.stdout
@@ -379,7 +407,15 @@ if  __name__ == '__main__':
                 stderr = e.stderr
                 (experiment_path / 'stderr').write_text(stderr)
         except subprocess.TimeoutExpired as timeout_expired:
+            print('Timeout')
             stdout = timeout_expired.stdout.decode()
+            if args.unstability_algorithm is not None:
+                last_timedout_simulations_parameter.append((path, options))
+                if len(last_timedout_simulations_parameter) >= args.unstability_algorithm:
+                    simulation_parameter_to_rerun = last_timedout_simulations_parameter.copy()
+                    last_timedout_simulations_parameter.clear()
+                    simulation_timeout *= 2
+                    print(f'Increasing timeout to {simulation_timeout}')
 
         if not args.no_save_stdout:
             (experiment_path / 'stdout').write_text(stdout)
