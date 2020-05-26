@@ -2510,7 +2510,9 @@ Scenes::sceneNewFoam(Sim* sim,
     VS3D* result = new VS3D(vs, fs, ls, cv, cx);
     growBubbleTowardRegionZero(*result,
                                0.2 * bubble_radius + getMaximumDistanceOfOneSphereToOthers(spheres),
-                               0.1 * bubble_radius);
+                               Options::doubleValue("remeshing-resolution")
+                                 * Options::doubleValue("lostopos-merge-proximity-epsilon-fraction")
+                                 / 3);
     return result;
 }
 
@@ -2528,7 +2530,8 @@ Scenes::scene2DBubbleLattice(Sim* sim,
     double bubble_size = 1.;
 
     std::vector<std::vector<std::vector<bool>>> bubble_positions(
-            whole_foam_size, std::vector<std::vector<bool>>(whole_foam_size, std::vector<bool>(1, false)));
+      whole_foam_size,
+      std::vector<std::vector<bool>>(whole_foam_size, std::vector<bool>(1, false)));
     size_t bubble_index = 0;
     for (size_t i : boost::irange(0lu, whole_foam_size))
     {
