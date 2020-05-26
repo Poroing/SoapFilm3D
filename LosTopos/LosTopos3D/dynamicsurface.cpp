@@ -774,7 +774,7 @@ void DynamicSurface::integrate( double desired_dt, double& actual_dt )
     
     const std::vector<Vec3d> saved_predicted_positions = get_newpositions();
     
-    while ( !success && number_cuts < m_maximum_timestep_cuts)
+    while ( !success && number_cuts <= m_maximum_timestep_cuts)
     {
         
         m_velocities.resize( get_num_vertices() );

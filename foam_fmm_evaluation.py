@@ -9,6 +9,12 @@ import itertools
 import functools
 import time
 
+class FailedSimulation(Exception):
+
+    def __init__(self, stdout, stderr):
+        self.stdout = stdout
+        self.stderr = stderr
+
 class SoapFilmSimulationConfigFile(object):
 
     @staticmethod
@@ -166,9 +172,8 @@ class SoapFilmSimulation(object):
                     continue
                 else:
                     print(completed_process.stderr)
-                    raise RuntimeError('An error as occured during the simulation')
+                    raise FailedSimulation(completed_process.stdout, completed_process.stderr)
             break
-
 
         return completed_process.stdout
 
@@ -367,10 +372,12 @@ if  __name__ == '__main__':
 
         try:
             stdout = simulation.run()
-        except RuntimeError as e:
+        except FailedSimulation as e:
             (experiment_path / 'error').touch()
-            print(e)
-            continue
+            stdout = e.stdout
+            if not args.no_save_stdout:
+                stderr = e.stderr
+                (experiment_path / 'stderr').write_text(stderr)
         except subprocess.TimeoutExpired as timeout_expired:
             stdout = timeout_expired.stdout.decode()
 

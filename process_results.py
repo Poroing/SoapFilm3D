@@ -86,10 +86,12 @@ def plot(simulation_parameter_product, args, output_directory):
 
 def compileExecutionTime(rows):
     execution_time = [ row.get('NaiveExecution', row.get('FMMExecution', None)) for row in rows ]
+    number_vertices = [ row['NumberVertices'] for row in rows ]
     execution_time.sort()
     return {
             'MedianExecutionTime' : execution_time[len(execution_time) // 2],
-            'MeanExecutionTime' : sum(map(float, execution_time)) / len(execution_time)
+            'MeanExecutionTime' : sum(map(float, execution_time)) / len(execution_time),
+            'MeanNumberVertices' : sum(map(float, number_vertices)) / len(number_vertices)
         }
 
 def compileMeanBubbleNumberVertices(rows):
@@ -266,8 +268,10 @@ class Csv(Process):
             if data_length is None:
                 data_length = len(value)
 
-            if data_length != len(value):
+            if data_length != len(value) and not self.arguments.crop:
                 raise ValueError('The standard output does not contain as much data of each type')
+
+            data_length = min(len(value), data_length)
 
         data_keys = data.keys()
         data = [ { k : v[i] for k, v in data.items() } for i in range(data_length) ]
@@ -419,6 +423,8 @@ commands_arguments_parser['csv'].add_argument(
         '--mode', choices=['mean_number_vertices', 'execution_time'], required=True)
 commands_arguments_parser['csv'].add_argument(
         '--filename-stem', default='data')
+commands_arguments_parser['csv'].add_argument(
+        '--crop', action='store_true')
 
 commands_arguments_parser['plot'].add_argument(
         '--template', required=True)
