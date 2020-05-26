@@ -85,7 +85,7 @@ class SoapFilmSimulation(object):
 
     @staticmethod
     def hasNotEnoughSphere(stderr):
-        return stdout.find('Not enough spheres') != -1
+        return stderr.find('Not enough spheres') != -1
 
     def __init__(self,
             output_directory,
@@ -133,32 +133,47 @@ class SoapFilmSimulation(object):
     def writeConfig(self):
         self.config.writeToFile(self.config_file.as_posix())
 
+    def shouldRetry(self, stdout, stderr):
+        return (
+            (
+                self.retry_on_failed_initialization
+                and not SoapFilmSimulation.hasFinishedInit(stdout)
+            )
+            or
+            (
+                self.retry_on_not_enough_spheres
+                and SoapFilmSimulation.hasNotEnoughSphere(stderr)
+            )
+        )
+
+
     def run(self):
-        completed_process = subprocess.run(
-                [
-                    './SoapFilm3D',
-                    self.config_file.as_posix(),
-                    'headless' if self.headless else 'output'
-                ],
-                capture_output=self.shouldCaptureStdout(),
-                text=True,
-                timeout=self.timeout)
+        number_tries = 1
+        while True:
+            print(f'Try {number_tries}')
+            completed_process = subprocess.run(
+                    [
+                        './SoapFilm3D',
+                        self.config_file.as_posix(),
+                        'headless' if self.headless else 'output'
+                    ],
+                    capture_output=self.shouldCaptureStdout(),
+                    text=True,
+                    timeout=self.timeout)
 
-        if completed_process.returncode != 0:
-            if (
-                    (
-                        not self.retry_on_failed_initialization
-                        or SoapFilmSimulation.hasFinishedInit(completed_process.stdout)
-                    )
-                    and (
-                        not self.retry_on_not_enough_spheres
-                        or not SoapFilmSimulation.hasNotEnoughSphere(completed_process.stderr)
-                    )
+            if completed_process.returncode != 0:
+                if not SoapFilmSimulation.hasFinishedInit(completed_process.stdout):
+                    print('Did Not Finished Initialization')
+                if SoapFilmSimulation.hasNotEnoughSphere(completed_process.stderr):
+                    print('Not enough spheres')
 
-                ):
-                raise FailedSimulation(completed_process.stdout, completed_process.stderr)
-            else:
-                return self.run()
+                if self.shouldRetry(completed_process.stdout, completed_process.stderr):
+                    number_tries += 1
+                    continue
+                else:
+                    print(completed_process.stderr)
+                    raise FailedSimulation(completed_process.stdout, completed_process.stderr)
+            break
 
         return completed_process.stdout
 
