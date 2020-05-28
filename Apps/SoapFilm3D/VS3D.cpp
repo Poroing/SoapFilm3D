@@ -590,7 +590,7 @@ VS3D::step(double dt)
             std::cout
               << "Warning: SurfTrack::integrate() failed to step the full length of the time step!"
               << std::endl;
-        if (m_st->integrationAddCollisions())
+        if (m_st->integrationHadCollisions())
         {
             ++m_number_consecutive_timestep_with_collisions;
             if (m_number_consecutive_timestep_with_collisions > m_sim_options.maximum_consecutive_timestep_with_collisions)
@@ -683,6 +683,8 @@ VS3D::constructOpenBoundaryFaces(std::vector<size_t>& open_boundary_vertices,
 void
 VS3D::smoothCirculation(double dt)
 {
+    Clock smoothing_duration;
+
     if (simOptions().smoothing_type == SimOptions::SmoothingType::BIHARMONIC)
     {
         biharmonicSmoothing(dt);
@@ -695,6 +697,8 @@ VS3D::smoothCirculation(double dt)
     {
         laplacianSmoothing(dt);
     }
+
+    std::cout << "SmoothingExecution " << smoothing_duration.seconds() << std::endl;
 }
 
 void

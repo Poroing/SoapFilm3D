@@ -1190,7 +1190,7 @@ bool CollisionPipeline::handle_collisions(double dt)
         }
         else
         {
-            m_surface.m_integration_add_collisions = true;
+            m_surface.m_integration_had_collisions = true;
         }
         
         if ( verbose )

@@ -750,7 +750,7 @@ int DynamicSurface::get_region_containing_point( const Vec3d& p )
 
 void DynamicSurface::integrate( double desired_dt, double& actual_dt )
 {     
-    m_integration_add_collisions = false;
+    m_integration_had_collisions = false;
     if ( m_collision_safety )
     {
       std::cout << "Checking collisions before integration.\n";
