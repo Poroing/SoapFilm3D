@@ -6,6 +6,12 @@ import csv
 import sys
 import multiprocessing
 
+def hasTimedout(output_directory, path, set_time):
+    return (output_directory / path / 'stdout').read_text().find(f'T = {float(set_time):g}') == -1
+
+def hasError(output_directory, path):
+    return (output_directory / path / 'error').exists()
+
 def checkPathExists(path):
     if not path.exists():
         raise ValueError(f'{path} does not exists.')
@@ -90,7 +96,7 @@ def compileExecutionTime(rows):
     execution_time.sort()
     return {
             'MedianExecutionTime' : execution_time[len(execution_time) // 2],
-            'MeanExecutionTime' : sum(map(float, execution_time)) / len(execution_time),
+            'MeanBiotSavartExecutionTime' : sum(map(float, execution_time)) / len(execution_time),
             'MeanNumberVertices' : sum(map(float, number_vertices)) / len(number_vertices)
         }
 
@@ -102,6 +108,15 @@ def compileMeanBubbleNumberVertices(rows):
             "MeanBubbleVertices" : sum(map(float, bubble_vertices)) / len(bubble_vertices)
         }
 
+def compileStepExecutionTime(rows):
+    step_execution_time = [ row['StepExecution'] for row in rows ]
+    biot_savart_execution_time = [ row['BiotSavartExecution'] for row in rows ]
+    number_vertices = [ row['NumberVertices'] for row in rows ]
+    return {
+            'MeanStepExecutionTime' : sum(map(float, step_execution_time)) / len(step_execution_time),
+            'MeanStepBiotSavartExecutionTime' : sum(map(float, biot_savart_execution_time)) / len(biot_savart_execution_time),
+        }
+
 def compile(output_directory, path, stem, compile_function, args):
     data_path = output_directory / path / (stem + '.csv')
     with open(data_path, newline='') as data_file:
@@ -109,11 +124,28 @@ def compile(output_directory, path, stem, compile_function, args):
         compiled_data = compile_function(list(data_object))
     return compiled_data
 
-def aggregate(simulation_parameter_product, args, output_directory):
+def aggregate(
+        simulation_parameter_product,
+        args,
+        output_directory,
+        ignore_non_existing=False,
+        ignore_timedout=False,
+        ignore_error=False):
+
     
     for paths_and_configs in simulation_parameter_product.iterateOnSets([ args.aggregate_on ]):
         data = []
         for path, config in paths_and_configs:
+            if not (output_directory / path).exists() and ignore_non_existing:
+                continue
+            if (
+                    hasTimedout(output_directory, path, config.get('simulation-time', 4.0))
+                    and ignore_timedout
+                ):
+                continue
+            if hasError(output_directory, path) and ignore_error:
+                continue
+
             compiled_data = { args.aggregate_on : config[args.aggregate_on] }
             if args.execution_time_file_stem is not None:
                 compiled_data.update(compile(
@@ -129,6 +161,14 @@ def aggregate(simulation_parameter_product, args, output_directory):
                         path,
                         args.mean_number_vertices_file_stem,
                         compileMeanBubbleNumberVertices,
+                        args
+                    ))
+            if args.step_execution_time_file_stem is not None:
+                compiled_data.update(compile(
+                        output_directory,
+                        path,
+                        args.step_execution_time_file_stem,
+                        compileStepExecutionTime,
                         args
                     ))
             data.append(compiled_data)
@@ -151,6 +191,7 @@ class Process(object):
     def __init__(self, output_directory, arguments):
         self.output_directory = output_directory
         self.arguments = arguments
+        self.ignore_non_existing = False
 
     def getOutputDirectory(self, path):
         return self.output_directory / path
@@ -159,6 +200,9 @@ class Process(object):
         path, config_pairs = path_and_config_pairs
 
         experiment_path = self.getOutputDirectory(path)
+        if self.ignore_non_existing and not experiment_path.exists():
+            return (None, None)
+
         checkPathExists(experiment_path)
 
         config_path = experiment_path / 'config.txt'
@@ -265,9 +309,10 @@ class Csv(Process):
         stdout = (experiment_path / 'stdout').read_text()
         for line in stdout.split('\n'):
             line_tokens = line.split(' ')
-            key, value = self.processLine(line_tokens)
-            if key is not None:
-                data.setdefault(key, []).append(value)
+            line_data = self.processLine(line_tokens)
+            if line_data is not None:
+                for key, value in line_data.items():
+                    data.setdefault(key, []).append(value)
 
         data_length = None
         for value in data.values():
@@ -295,29 +340,51 @@ class CsvExecutionTime(Csv):
 
     def processLine(self, line_tokens):
         if line_tokens[0] not in self.TOKEN:
-            return None, None
+            return None
 
-        return line_tokens[0], float(line_tokens[1])
+        return { line_tokens[0] : float(line_tokens[1]) }
 
 class CsvMeanNumberVertices(Csv):
 
     def processLine(self, line_tokens):
         if line_tokens[0] != 'NumberVerticesIncidentToRegions':
-            return None, None
+            return None
 
         bubble_number_vertices = list(map(int, line_tokens[2:]))
         mean_bubble_number_vertices = sum(bubble_number_vertices) / len(bubble_number_vertices)
-        return 'MeanBubbleNumberVertices', mean_bubble_number_vertices
+        return { 'MeanBubbleNumberVertices' : mean_bubble_number_vertices }
 
 class CsvTimeStepExecutionTime(CsvExecutionTime):
 
     def run(self, path, config):
         self.total_biot_savart_execution_time = 0
+        self.number_vertices = 0
         super().run(path, config)
 
 
     def processLine(self, line_tokens):
-        name, value = super().processLine(line_tokens)
+        data = super().processLine(line_tokens)
+        if data is not None:
+            if 'NumberVertices' in data:
+                self.number_vertices = data['NumberVertices']
+            elif 'NaiveExecution' in data:
+                self.total_biot_savart_execution_time += data['NaiveExecution']
+            elif 'FMMExecution' in data:
+                self.total_biot_savart_execution_time += data['FMMExecution']
+            return None
+        elif line_tokens[0] == 'StepExecution':
+            data = {
+                'NumberVertices' : self.number_vertices,
+                'BiotSavartExecution' : self.total_biot_savart_execution_time,
+                'StepExecution' : float(line_tokens[1])
+            }
+            self.total_biot_savart_execution_time = 0
+            return data
+        return None
+
+
+
+
 
 
 class Video(Process):
@@ -373,6 +440,9 @@ argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
 argument_parser.add_argument('--directory-order', action='append', default=[])
 argument_parser.add_argument('-j', '--number-threads', type=int, default=1)
+argument_parser.add_argument('--ignore-non-existing', action='store_true')
+argument_parser.add_argument('--ignore-timeout', action='store_true')
+argument_parser.add_argument('--ignore-error', action='store_true')
 argument_parser.add_argument('output_directory')
 argument_parser.add_argument('command', choices=commands)
 argument_parser.add_argument('command_arguments', nargs=argparse.REMAINDER)
@@ -426,7 +496,9 @@ commands_arguments_parser['csv'].add_argument(
 commands_arguments_parser['csv'].add_argument(
         '--skip-existing', action='store_true')
 commands_arguments_parser['csv'].add_argument(
-        '--mode', choices=['mean_number_vertices', 'execution_time'], required=True)
+        '--mode',
+        choices=['mean_number_vertices', 'execution_time', 'step_execution_time'],
+        required=True)
 commands_arguments_parser['csv'].add_argument(
         '--filename-stem', default='data')
 commands_arguments_parser['csv'].add_argument(
@@ -455,6 +527,8 @@ commands_arguments_parser['aggregate'].add_argument(
         '--delimiter', default=' ')
 commands_arguments_parser['aggregate'].add_argument(
         '--output-file-stem', default='aggregate')
+commands_arguments_parser['aggregate'].add_argument(
+        '--step-execution-time-file-stem')
 
 args = argument_parser.parse_args()
 command_args = commands_arguments_parser[args.command].parse_args(args.command_arguments)
@@ -478,19 +552,35 @@ elif args.command == 'csv' and command_args.mode == 'mean_number_vertices':
     process = CsvMeanNumberVertices(output_directory, command_args)
 elif args.command == 'csv' and command_args.mode == 'execution_time':
     process = CsvExecutionTime(output_directory, command_args)
+elif args.command == 'csv' and command_args.mode == 'step_execution_time':
+    process = CsvTimeStepExecutionTime(output_directory, command_args)
 else:
     process = None
 
 if process is not None:
+    to_process = []
+    for path, config in simulation_parameter_product:
+        if not (output_directory / path).exists() and args.ignore_non_existing:
+            continue
+        if (
+                hasTimedout(output_directory, path, config.get('simulation-time', 4.0))
+                and args.ignore_timeout
+            ):
+            continue
+        if hasError(output_directory, path) and args.ignore_error:
+            continue
+
+        to_process.append((path, config))
+
     if args.number_threads > 1:
         with multiprocessing.Pool(args.number_threads) as pool:
             experiment_paths_and_config = list(pool.imap_unordered(
                     process,
-                    [ (path, config_pairs) for path, config_pairs in simulation_parameter_product ]))
+                    to_process))
 
     else:
         experiment_paths_and_config = []
-        for path, config in simulation_parameter_product:
+        for path, config in to_process:
             experiment_paths_and_config.append(process((path, config)))
 
 if (
@@ -508,6 +598,8 @@ if args.command == 'plot':
     plot(simulation_parameter_product, command_args, output_directory)
 
 if args.command == 'aggregate':
-    aggregate(simulation_parameter_product, command_args, output_directory)
+    aggregate(simulation_parameter_product, command_args, output_directory,
+            ignore_error=args.ignore_error, ignore_non_existing=args.ignore_non_existing,
+            ignore_timedout=args.ignore_timeout)
 
         
