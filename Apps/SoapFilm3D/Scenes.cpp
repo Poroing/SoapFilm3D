@@ -321,8 +321,8 @@ isSphereIntersectingOtherSpheres(const Vec3d& center,
 // TODO: Is copying the distribution the best ?
 template<class RadiusDistribution, class CoordinateDistribution>
 std::enable_if_t<
-  std::is_same_v<typename RadiusDistribution::result_type,
-                 double> && std::is_same_v<typename CoordinateDistribution::result_type, double>,
+  std::is_same<typename RadiusDistribution::result_type,
+                 double>::value && std::is_same<typename CoordinateDistribution::result_type, double>::value,
   std::vector<std::pair<Vec3d, double>>>
 getRandomSpheres(RadiusDistribution radius_distribution,
                  CoordinateDistribution coordinate_distribution,
@@ -358,8 +358,8 @@ getRandomSpheres(RadiusDistribution radius_distribution,
 // TODO: Is copying the distribution the best ?
 template<class RadiusDistribution, class CoordinateDistribution>
 std::enable_if_t<
-  std::is_same_v<typename RadiusDistribution::result_type,
-                 double> && std::is_same_v<typename CoordinateDistribution::result_type, double>,
+  std::is_same<typename RadiusDistribution::result_type,
+                 double>::value && std::is_same<typename CoordinateDistribution::result_type, double>::value,
   std::vector<std::pair<Vec3d, double>>>
 getRandomNonIntersectingSpheres(RadiusDistribution radius_distribution,
                                 CoordinateDistribution coordinate_distribution,
