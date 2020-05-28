@@ -111,10 +111,12 @@ def compileMeanBubbleNumberVertices(rows):
 def compileStepExecutionTime(rows):
     step_execution_time = [ row['StepExecution'] for row in rows ]
     biot_savart_execution_time = [ row['BiotSavartExecution'] for row in rows ]
+    step_execution_time = [ row['SmoothingExecution'] for row in rows ]
     number_vertices = [ row['NumberVertices'] for row in rows ]
     return {
             'MeanStepExecutionTime' : sum(map(float, step_execution_time)) / len(step_execution_time),
             'MeanStepBiotSavartExecutionTime' : sum(map(float, biot_savart_execution_time)) / len(biot_savart_execution_time),
+            'MeanStepSmoothingExecutionTime' : sum(map(float, smoothing_execution_time)) / len(smoothing_execution_time),
         }
 
 def compile(output_directory, path, stem, compile_function, args):
@@ -139,11 +141,11 @@ def aggregate(
             if not (output_directory / path).exists() and ignore_non_existing:
                 continue
             if (
-                    hasTimedout(output_directory, path, config.get('simulation-time', 4.0))
-                    and ignore_timedout
+                    ignore_timedout
+                    and hasTimedout(output_directory, path, config.get('simulation-time', 4.0))
                 ):
                 continue
-            if hasError(output_directory, path) and ignore_error:
+            if ignore_error and hasError(output_directory, path): 
                 continue
 
             compiled_data = { args.aggregate_on : config[args.aggregate_on] }
@@ -261,6 +263,9 @@ class Render(Process):
                         '--number-subdivisions', str(self.arguments.number_subdivisions_render),
                         '--scale', str(self.arguments.scale),
                         '--path-to-blender-toolbox', self.arguments.path_to_toolbox,
+                        '--mesh-translation-x', str(self.arguments.mesh_translation_x),
+                        '--mesh-translation-y', str(self.arguments.mesh_translation_y),
+                        '--mesh-translation-z', str(self.arguments.mesh_translation_z)
                         ]
             
             if self.arguments.environment_texture is not None:
@@ -358,6 +363,7 @@ class CsvTimeStepExecutionTime(CsvExecutionTime):
 
     def run(self, path, config):
         self.total_biot_savart_execution_time = 0
+        self.smoothing_execution_time = 0
         self.number_vertices = 0
         super().run(path, config)
 
@@ -372,13 +378,17 @@ class CsvTimeStepExecutionTime(CsvExecutionTime):
             elif 'FMMExecution' in data:
                 self.total_biot_savart_execution_time += data['FMMExecution']
             return None
+        elif line_tokens[0] == 'SmoothingExecution':
+            self.smoothing_execution_time += float(line_tokens[1])
         elif line_tokens[0] == 'StepExecution':
             data = {
                 'NumberVertices' : self.number_vertices,
                 'BiotSavartExecution' : self.total_biot_savart_execution_time,
-                'StepExecution' : float(line_tokens[1])
+                'StepExecution' : float(line_tokens[1]),
+                'SmoothingExecution' : self.smoothing_execution_time
             }
             self.total_biot_savart_execution_time = 0
+            self.smoothing_execution_time = 0
             return data
         return None
 
@@ -487,6 +497,9 @@ commands_arguments_parser['render'].add_argument(
         '--frame-output-directory')
 commands_arguments_parser['render'].add_argument(
         '-T', '--render-every-n-obj', type=int, default=1)
+commands_arguments_parser['render'].add_argument('--mesh-translation-x', type=float, default=0)
+commands_arguments_parser['render'].add_argument('--mesh-translation-y', type=float, default=0)
+commands_arguments_parser['render'].add_argument('--mesh-translation-z', type=float, default=0)
 
 commands_arguments_parser['delete-render'].add_argument(
         '--frame-output-directory')
@@ -563,11 +576,11 @@ if process is not None:
         if not (output_directory / path).exists() and args.ignore_non_existing:
             continue
         if (
-                hasTimedout(output_directory, path, config.get('simulation-time', 4.0))
-                and args.ignore_timeout
+                args.ignore_timeout
+                and hasTimedout(output_directory, path, config.get('simulation-time', 4.0))
             ):
             continue
-        if hasError(output_directory, path) and args.ignore_error:
+        if args.ignore_error and hasError(output_directory, path):
             continue
 
         to_process.append((path, config))
