@@ -206,8 +206,7 @@ class Render(Process):
 
         print(f'{obj_path} --> {output_frame}')
         if not self.arguments.test_run:
-            subprocess.run(
-                    [ 
+            command = [ 
                         self.arguments.blender_executable,
                         '--background',
                         '--python',
@@ -218,8 +217,15 @@ class Render(Process):
                         '--number-subdivisions', str(self.arguments.number_subdivisions_render),
                         '--scale', str(self.arguments.scale),
                         '--path-to-blender-toolbox', self.arguments.path_to_toolbox,
+                        ]
+            
+            if self.arguments.environment_texture is not None:
+                command.extend([
                         '--environment_texture', self.arguments.environment_texture
-                    ],
+                        ])
+
+            subprocess.run(
+                    command,
                     capture_output=not self.arguments.show_blender_stdout
                 )
 
