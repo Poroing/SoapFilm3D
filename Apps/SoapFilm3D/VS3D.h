@@ -225,7 +225,12 @@ class VS3D
      *  Return the pair of incident region of a manifold vertex.
      */
     Vec2i getManifoldVertexRegionPair(size_t vertex_index) const;
-    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> getIncidentRegions() const;
+    /**
+     *  Returns a tensor such that tensor[i](j, k) is true if and only if the vertex with index i
+     *  is incident to both region j and k.
+     */
+    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> getVerticesIncidentRegionsPairTensor() const;
+    std::vector<std::vector<size_t>> getVerticesIncidentRegions() const;
     /**
      *  Returns the pair of regions incident to the given vertex. The pairs are garanted to have
      *  the region with the lowest index as first element.

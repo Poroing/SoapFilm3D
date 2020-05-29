@@ -24,6 +24,8 @@
 #include <igl/cotmatrix.h>
 #include <igl/massmatrix.h>
 
+#include <boost/range/algorithm/find.hpp>
+
 VecXd
 BiotSavart(VS3D& vs, const VecXd& dx);
 
@@ -584,6 +586,7 @@ VS3D::step(double dt)
     // move the mesh
     if (counter % 2 != 0)
     {
+        Clock integration_duration;
         double actual_dt;
         m_st->integrate(dt, actual_dt);
         if (actual_dt != dt)
@@ -593,7 +596,8 @@ VS3D::step(double dt)
         if (m_st->integrationHadCollisions())
         {
             ++m_number_consecutive_timestep_with_collisions;
-            if (m_number_consecutive_timestep_with_collisions > m_sim_options.maximum_consecutive_timestep_with_collisions)
+            if (m_number_consecutive_timestep_with_collisions
+                > m_sim_options.maximum_consecutive_timestep_with_collisions)
             {
                 throw std::runtime_error("Too much consecutive timesteps with collisions");
             }
@@ -602,6 +606,8 @@ VS3D::step(double dt)
         {
             m_number_consecutive_timestep_with_collisions = 0;
         }
+
+        std::cout << "IntegrationDuration " << integration_duration.seconds() << std::endl;
     }
 
     //    update_dbg_quantities();
@@ -705,7 +711,7 @@ void
 VS3D::biharmonicSmoothing(double dt)
 {
     std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs =
-      getIncidentRegions();
+      getVerticesIncidentRegionsPairTensor();
 
     MatXd igl_ready_positions = getIglReadyPositions();
     MatXi igl_ready_triangles = getIglReadyTriangles();
@@ -747,42 +753,67 @@ VS3D::biharmonicSmoothing(double dt)
 void
 VS3D::umbrellaSmoothing(double dt)
 {
-    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs =
-      getIncidentRegions();
+    std::vector<std::vector<size_t>> vertices_incident_regions = getVerticesIncidentRegions();
 
-    MatXd igl_ready_positions = getIglReadyPositions();
-    MatXi igl_ready_triangles = getIglReadyTriangles();
-
-    VecXd umbrella_laplacian;
-    VecXd gammas;
-    for (int j = 0; j < m_nregion; j++)
+    // Store the vertices new circulation in the upper triangle of matrices
+    std::vector<Eigen::MatrixXd> new_gammas(mesh().nv());
+    for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
     {
-        for (int k = j + 1; k < m_nregion; k++)
-        {
-            umbrella_laplacian = VecXd::Zero(mesh().nv());
-            gammas = getGammas(j, k);
-            for (std::size_t vertex_index : boost::irange(0lu, mesh().nv()))
-            {
-                if (!incident_region_pairs[vertex_index](j, k))
-                {
-                    continue;
-                }
+        size_t number_incident_regions = vertices_incident_regions[vertex_index].size();
+        new_gammas[vertex_index] =
+          Eigen::MatrixXd::Zero(number_incident_regions, number_incident_regions);
+    }
 
+    auto is_incident_to_region_pair = [&vertices_incident_regions](size_t vertex_index,
+                                                                   const Vec2i& region_pair) {
+        std::vector<size_t>& vertex_incident_regions = vertices_incident_regions[vertex_index];
+        return boost::find(vertex_incident_regions, region_pair[0]) == vertex_incident_regions.end()
+               || boost::find(vertex_incident_regions, region_pair[1])
+                    == vertex_incident_regions.end();
+    };
+
+    for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
+    {
+        std::vector<size_t>& vertex_incident_regions = vertices_incident_regions[vertex_index];
+        for (size_t region_index_a : boost::irange(0lu, vertex_incident_regions.size()))
+        {
+            for (size_t region_index_b :
+                 boost::irange(region_index_a, vertex_incident_regions.size()))
+            {
+                Vec2i region_pair(vertex_incident_regions[region_index_a],
+                                  vertex_incident_regions[region_index_b]);
+                double umbrella_laplacian = 0;
                 for (std::size_t adjacent_vertex_index : getVertexAdjacentVertices(vertex_index))
                 {
-                    if (!incident_region_pairs[vertex_index](j, k))
+                    if (is_incident_to_region_pair(adjacent_vertex_index, region_pair))
                     {
                         continue;
                     }
 
-                    umbrella_laplacian[vertex_index] +=
-                      gammas[adjacent_vertex_index] - gammas[vertex_index];
+                    umbrella_laplacian +=
+                      Gamma(adjacent_vertex_index).get(region_pair) - Gamma(vertex_index).get(region_pair);
                 }
 
-                umbrella_laplacian[vertex_index] /=
-                  getVertexAreaIncidentToRegionPair(vertex_index, Vec2i(j, k));
+                umbrella_laplacian /= getVertexAreaIncidentToRegionPair(vertex_index, region_pair);
+                new_gammas[vertex_index](region_pair[0], region_pair[1]) =
+                  Gamma(vertex_index).get(region_pair)
+                  + simOptions().smoothing_coef * dt * umbrella_laplacian;
             }
-            setGammas(j, k, gammas + simOptions().smoothing_coef * dt * umbrella_laplacian);
+        }
+    }
+
+    for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
+    {
+        std::vector<size_t>& vertex_incident_regions = vertices_incident_regions[vertex_index];
+        for (size_t region_index_a : boost::irange(0lu, vertex_incident_regions.size()))
+        {
+            for (size_t region_index_b :
+                 boost::irange(region_index_a, vertex_incident_regions.size()))
+            {
+                Vec2i region_pair(vertex_incident_regions[region_index_a],
+                                  vertex_incident_regions[region_index_b]);
+                Gamma(vertex_index).set(region_pair, new_gammas[vertex_index](region_pair[0], region_pair[1]));
+            }
         }
     }
 }
@@ -791,7 +822,7 @@ void
 VS3D::laplacianSmoothing(double dt)
 {
     std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs =
-      getIncidentRegions();
+      getVerticesIncidentRegionsPairTensor();
 
     MatXd igl_ready_positions = getIglReadyPositions();
     MatXi igl_ready_triangles = getIglReadyTriangles();
@@ -819,7 +850,7 @@ VS3D::laplacianSmoothing(double dt)
 }
 
 std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>>
-VS3D::getIncidentRegions() const
+VS3D::getVerticesIncidentRegionsPairTensor() const
 {
     std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> incident_region_pairs(
       mesh().nv());
@@ -835,6 +866,32 @@ VS3D::getIncidentRegions() const
         incident_region_pairs[t[2]](l[0], l[1]) = incident_region_pairs[t[2]](l[1], l[0]) = true;
     }
     return incident_region_pairs;
+}
+
+std::vector<std::vector<size_t>>
+VS3D::getVerticesIncidentRegions() const
+{
+    std::vector<std::vector<size_t>> incident_regions(mesh().nv());
+
+    for (size_t i = 0; i < mesh().nt(); i++)
+    {
+        LosTopos::Vec3st t = mesh().get_triangle(i);
+        LosTopos::Vec2i l = mesh().get_triangle_label(i);
+        for (size_t index : boost::irange(0lu, 3lu))
+        {
+            incident_regions[t[index]].push_back(l[0]);
+            incident_regions[t[index]].push_back(l[1]);
+        }
+    }
+
+    for (std::vector<size_t>& vertex_incident_regions : incident_regions)
+    {
+        std::sort(vertex_incident_regions.begin(), vertex_incident_regions.end());
+        auto new_end = std::unique(vertex_incident_regions.begin(), vertex_incident_regions.end());
+        vertex_incident_regions.erase(new_end, vertex_incident_regions.end());
+    }
+
+    return incident_regions;
 }
 
 void
@@ -1045,6 +1102,8 @@ VS3D::shiftGammasToGlobalMean()
 void
 VS3D::improveMesh(size_t number_iteration)
 {
+    Clock improve_mesh_duration;
+
     for (int i = 0; i < number_iteration; i++)
     {
         m_st->topology_changes();
@@ -1062,6 +1121,8 @@ VS3D::improveMesh(size_t number_iteration)
         std::cout << " " << number_vertices;
     }
     std::cout << std::endl;
+
+    std::cout << "ImproveMeshExecution " << improve_mesh_duration.seconds() << std::endl;
 }
 
 void
