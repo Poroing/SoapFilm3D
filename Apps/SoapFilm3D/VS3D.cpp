@@ -795,7 +795,7 @@ VS3D::umbrellaSmoothing(double dt)
                 }
 
                 umbrella_laplacian /= getVertexAreaIncidentToRegionPair(vertex_index, region_pair);
-                new_gammas[vertex_index](region_pair[0], region_pair[1]) =
+                new_gammas[vertex_index](region_index_a, region_index_b) =
                   Gamma(vertex_index).get(region_pair)
                   + simOptions().smoothing_coef * dt * umbrella_laplacian;
             }
@@ -812,7 +812,7 @@ VS3D::umbrellaSmoothing(double dt)
             {
                 Vec2i region_pair(vertex_incident_regions[region_index_a],
                                   vertex_incident_regions[region_index_b]);
-                Gamma(vertex_index).set(region_pair, new_gammas[vertex_index](region_pair[0], region_pair[1]));
+                Gamma(vertex_index).set(region_pair, new_gammas[vertex_index](region_index_a, region_index_b));
             }
         }
     }
