@@ -1,4 +1,5 @@
 //
+//
 //  VS3D.cpp
 //  MultiTracker
 //
@@ -135,6 +136,7 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
         m_constrained_velocities = constrained_velocities;
         if (m_constrained_velocities.size() != m_constrained_positions.size())
         {
+
             m_constrained_velocities.resize(m_constrained_positions.size(), Vec3d(0, 0, 0));
         }
 
@@ -767,9 +769,9 @@ VS3D::umbrellaSmoothing(double dt)
     auto is_incident_to_region_pair = [&vertices_incident_regions](size_t vertex_index,
                                                                    const Vec2i& region_pair) {
         std::vector<size_t>& vertex_incident_regions = vertices_incident_regions[vertex_index];
-        return boost::find(vertex_incident_regions, region_pair[0]) == vertex_incident_regions.end()
-               || boost::find(vertex_incident_regions, region_pair[1])
-                    == vertex_incident_regions.end();
+        return boost::find(vertex_incident_regions, region_pair[0]) != vertex_incident_regions.end()
+               && boost::find(vertex_incident_regions, region_pair[1])
+                    != vertex_incident_regions.end();
     };
 
     for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
