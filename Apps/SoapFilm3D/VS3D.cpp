@@ -787,7 +787,7 @@ VS3D::umbrellaSmoothing(double dt)
                 double umbrella_laplacian = 0;
                 for (std::size_t adjacent_vertex_index : getVertexAdjacentVertices(vertex_index))
                 {
-                    if (is_incident_to_region_pair(adjacent_vertex_index, region_pair))
+                    if (!is_incident_to_region_pair(adjacent_vertex_index, region_pair))
                     {
                         continue;
                     }
