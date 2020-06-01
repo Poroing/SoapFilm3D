@@ -232,6 +232,12 @@ class VS3D
     std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> getVerticesIncidentRegionsPairTensor() const;
     std::vector<std::vector<size_t>> getVerticesIncidentRegions() const;
     /**
+     *  Returns the regions incident to the triangle incident to each vertices. Each pair has the
+     *  region with the lowest index first. Each pair is only present once for each vertex. Note
+     *  that this is different from taking every pair of regions incident to the vertex.
+     */
+    std::vector<std::vector<Vec2i>> getVerticesIncidentRegionPairs() const;
+    /**
      *  Returns the pair of regions incident to the given vertex. The pairs are garanted to have
      *  the region with the lowest index as first element.
      */

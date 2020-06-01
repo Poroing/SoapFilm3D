@@ -29,6 +29,7 @@ typedef Eigen::Matrix<int, Eigen::Dynamic, 3> MatXi;
 typedef Eigen::SparseMatrix<double> SparseMatd;
 
 Vec3i vc(const LosTopos::Vec3st & t);
+Vec2i vc(const LosTopos::Vec2i & l);
 Vec3d vc(const LosTopos::Vec3d & v);
 LosTopos::Vec3d vc(const Vec3d & v);
 
