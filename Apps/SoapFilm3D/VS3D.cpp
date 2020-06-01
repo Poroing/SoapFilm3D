@@ -1123,12 +1123,16 @@ VS3D::shiftGammasToGlobalMean()
 void
 VS3D::improveMesh(size_t number_iteration)
 {
-    Clock improve_mesh_duration;
 
     for (int i = 0; i < number_iteration; i++)
     {
+        Clock topology_changes_duration;
         m_st->topology_changes();
+        std::cout << "TopologyChangeExecution " << topology_changes_duration.seconds() << std::endl;
+
+        Clock improve_mesh_duration;
         m_st->improve_mesh();
+        std::cout << "ImproveMeshExecution " << improve_mesh_duration.seconds() << std::endl;
     }
 
     // defrag the mesh in the end, to ensure the next step starts with a clean mesh
@@ -1143,7 +1147,6 @@ VS3D::improveMesh(size_t number_iteration)
     }
     std::cout << std::endl;
 
-    std::cout << "ImproveMeshExecution " << improve_mesh_duration.seconds() << std::endl;
 }
 
 void
