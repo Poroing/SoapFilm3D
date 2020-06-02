@@ -1128,7 +1128,8 @@ VS3D::improveMesh(size_t number_iteration)
     {
         Clock topology_changes_duration;
         m_st->topology_changes();
-        std::cout << "TopologyChangesDuration " << topology_changes_duration.seconds() << std::endl;
+        std::cout << "TopologyChangeExecution " << topology_changes_duration.seconds() << std::endl;
+
         Clock improve_mesh_duration;
         m_st->improve_mesh();
         std::cout << "ImproveMeshExecution " << improve_mesh_duration.seconds() << std::endl;
