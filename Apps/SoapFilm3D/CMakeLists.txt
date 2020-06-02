@@ -42,3 +42,4 @@ include_directories (${EIGEN_INCLUDE_DIR})
 
 add_executable (SoapFilm3D ${Headers} ${Sources})
 target_link_libraries (SoapFilm3D LosTopos ${DEFAULT_LIBRARIES})
+target_compile_features (SoapFilm3D PUBLIC cxx_std_17)
