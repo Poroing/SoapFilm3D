@@ -163,13 +163,6 @@ BiotSavart_fmmtl(VS3D& vs, const VecXd& dx)
         Vec3d gamma = -(e01 * vs.Gamma(t[2]).get(l) + e12 * vs.Gamma(t[0]).get(l)
                         + e20 * vs.Gamma(t[1]).get(l));
 
-        //            Vec3d dx = x - xp;
-        ////            double dxn = dx.norm();
-        //            double dxn = sqrt(dx.squaredNorm() + vs.delta() * vs.delta());
-        //
-        //            v += gamma.cross(dx) / (dxn * dxn * dxn);
-        ////            v += gamma.cross(dx) / (dxn * dxn * dxn) * (1 - exp(-dxn / m_delta));
-
         sources.push_back(Vec<3, double>(xp[0], xp[1], xp[2]));
         charges.push_back(Vec<3, double>(gamma[0], gamma[1], gamma[2]));
     }
@@ -201,14 +194,14 @@ VecXd
 BiotSavart_fast_winding_number(VS3D& vs, const VecXd& dx)
 {
     Clock t1;
-    
-    Eigen::MatrixX3d sources(Eigen::MatrixX3d::Zero(vs.mesh().nt()));
-    Eigen::MatrixX3d charges(Eigen::MatrixX3d::Zero(vs.mesh().nt()));
-    Eigen::MatrixX3d targets(Eigen::MatrixX3d::Zero(vs.mesh().nv()));
+
+    Eigen::MatrixX3d sources(Eigen::MatrixX3d::Zero(vs.mesh().nt(), 3));
+    Eigen::MatrixX3d charges(Eigen::MatrixX3d::Zero(vs.mesh().nt(), 3));
+    Eigen::MatrixX3d targets(Eigen::MatrixX3d::Zero(vs.mesh().nv(), 3));
 
     for (size_t i = 0; i < vs.mesh().nv(); i++)
     {
-        sources.row(i) = vs.pos(i);
+        targets.row(i) = vs.pos(i);
     }
 
     for (size_t j = 0; j < vs.mesh().nt(); j++)
@@ -245,7 +238,13 @@ BiotSavart_fast_winding_number(VS3D& vs, const VecXd& dx)
 
     // Build the FMM
     Eigen::MatrixX3d result;
-    igl::fast_winding_number_biot_savart(sources, charges, targets, vs.delta(), result);
+    igl::fast_winding_number_biot_savart(sources,
+                                         charges,
+                                         targets,
+                                         Options::intValue("winding-expansion-order"),
+                                         Options::doubleValue("winding-beta"),
+                                         vs.delta(),
+                                         result);
 
     VecXd vel = VecXd::Zero(vs.mesh().nv() * 3);
     for (size_t i = 0; i < vs.mesh().nv(); i++)
@@ -256,7 +255,6 @@ BiotSavart_fast_winding_number(VS3D& vs, const VecXd& dx)
     std::cout << "FastWindingExecution " << t1.seconds() << std::endl;
 
     return vel;
-
 }
 
 VecXd
@@ -267,20 +265,22 @@ BiotSavart(VS3D& vs, const VecXd& dx)
     std::cout << "NumberFaces " << vs.mesh().nt() << std::endl;
 
 #ifndef WIN32
-    if (Options::strValue("fast_summation") == "fmmtl")
+    if (Options::strValue("fast-summation") == "fmmtl")
     {
         return BiotSavart_fmmtl(vs, dx);
     }
-    else 
+    else
 #endif
-    if (Options::strValue("fast_summation") == "naive")
+      if (Options::strValue("fast-summation") == "naive")
     {
         return BiotSavart_naive(vs, dx);
     }
-    else if (Options::strValue("fast_summation") == "fast_winding")
+    else if (Options::strValue("fast-summation") == "winding")
     {
         return BiotSavart_fast_winding_number(vs, dx);
     }
+
+    throw std::runtime_error("Non Implemented Fast Summation Method");
 }
 
 //#define FANGS_VERSION

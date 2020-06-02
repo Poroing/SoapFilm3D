@@ -3,6 +3,15 @@
 #include "igl/igl_inline.h"
 #include <Eigen/Core>
 #include <vector>
+#include <Eigen/Geometry>
+#include "igl/octree.h"
+#include "igl/knn.h"
+#include "igl/parallel_for.h"
+#include "igl/PI.h"
+#include "igl/cross.h"
+#include <vector>
+#include <cassert>
+
 namespace igl
 {
   // Generate the precomputation for the fast winding number for point data
@@ -82,7 +91,7 @@ namespace igl
     typename BetaType,
     typename DeltaType,
     typename DerivedWN>
-  IGL_INLINE void fast_winding_number(
+  IGL_INLINE void fast_winding_number_biot_savart(
     const Eigen::MatrixBase<DerivedP>& P,
     const Eigen::MatrixBase<DerivedG>& G,
     const std::vector<std::vector<Index> > & point_indices,
@@ -101,7 +110,7 @@ namespace igl
     typename BetaType, 
     typename DeltaType,
     typename DerivedWN>
-  IGL_INLINE void fast_winding_number(
+  IGL_INLINE void fast_winding_number_biot_savart(
     const Eigen::MatrixBase<DerivedP>& P,
     const Eigen::MatrixBase<DerivedG>& G,
     const Eigen::MatrixBase<DerivedQ>& Q,
@@ -128,22 +137,13 @@ namespace igl
     typename DerivedQ, 
     typename DerivedWN,
     typename DeltaType>
-  IGL_INLINE void fast_winding_number(
+  IGL_INLINE void fast_winding_number_biot_savart(
     const Eigen::MatrixBase<DerivedP>& P,
     const Eigen::MatrixBase<DerivedG>& G,
     const Eigen::MatrixBase<DerivedQ>& Q,
     DeltaType delta,
     Eigen::PlainObjectBase<DerivedWN>& WN);
 }
-
-#include <Eigen/Geometry>
-#include "igl/octree.h"
-#include "igl/knn.h"
-#include "igl/parallel_for.h"
-#include "igl/PI.h"
-#include "igl/cross.h"
-#include <vector>
-#include <cassert>
 
 template <
   typename DerivedP, 
@@ -153,7 +153,7 @@ template <
   typename DerivedCM, 
   typename DerivedR,
   typename DerivedEC>
-IGL_INLINE void igl::fast_winding_number(
+IGL_INLINE void igl::fast_winding_number_biot_savart(
   const Eigen::MatrixBase<DerivedP>& P,
   const Eigen::MatrixBase<DerivedG>& G,
   const std::vector<std::vector<Index> > & point_indices,
@@ -196,14 +196,16 @@ IGL_INLINE void igl::fast_winding_number(
       Eigen::Matrix<real_ec,1,3> zeroth_expansion;
       zeroth_expansion << 0,0,0;
       real_p areatotal = 0.0;
+
       for(int j = 0; j < point_indices[index].size(); j++){
           int curr_point_index = point_indices[index][j];
         
           masscenter += P.row(curr_point_index);
           zeroth_expansion += G.row(curr_point_index);
+          areatotal += 1.;
       }
     
-      masscenter = masscenter/areatotal;
+      masscenter = masscenter / areatotal;
       CM.row(index) = masscenter;
       EC.block(index,0,1,3) = zeroth_expansion;
     
@@ -264,7 +266,7 @@ template <
   typename BetaType,
   typename DeltaType,
   typename DerivedWN>
-IGL_INLINE void igl::fast_winding_number(
+IGL_INLINE void igl::fast_winding_number_biot_savart(
   const Eigen::MatrixBase<DerivedP>& P,
   const Eigen::MatrixBase<DerivedG>& G,
   const std::vector<std::vector<Index> > & point_indices,
@@ -301,15 +303,9 @@ IGL_INLINE void igl::fast_winding_number(
     const Eigen::Matrix<real_ec,1,3> & anorm)->WnRowVec
   {
     const typename RowVec::Scalar loc_norm = std::sqrt(loc.norm() * loc.norm() + delta * delta);
-    if(loc_norm == 0)
-    {
-      return 0.5;
-    }else
-    {
-      WnRowVec result;
-      igl::cross(anorm, loc, result);
-      return result / (PI_4*(loc_norm*loc_norm*loc_norm));
-    }
+    WnRowVec result;
+    igl::cross(anorm, loc, result);
+    return - result / (PI_4*(loc_norm*loc_norm*loc_norm));
   };
 
   auto expansion_eval = 
@@ -335,9 +331,10 @@ IGL_INLINE void igl::fast_winding_number(
       SecondDerivative(2,2) += d;
 
       Eigen::Matrix<real_wn, 3, 3> TempCoeffs;
+      Eigen::Matrix<real_ec, 3, 3> ExpansionCoefficients = Eigen::Map<const Eigen::Matrix<real_ec, 3, 3>>(EC.row(child_index).template segment<9>(3).data());
       igl::cross(
-              Eigen::Map<Eigen::Matrix<real_ec, 3, 3>>(EC.row(child_index).template segment<9>(3)),
-              SecondDerivative.transpose(),
+              ExpansionCoefficients,
+              SecondDerivative,
               TempCoeffs);
       for (size_t i = 0; i < 3; ++i)
       {
@@ -365,13 +362,15 @@ IGL_INLINE void igl::fast_winding_number(
           15.0*loc(i)*locTloc + (-3.0/(PI_4_r5))*(RowCol_Diagonal);
 
         Eigen::Matrix<real_wn, 3, 3> TempCoeffs;
-        igl::cross(Eigen::Map<Eigen::Matrix<real_ec,3,3>>(EC.row(child_index).template segment<9>(12 + i*9)),
+        Eigen::Matrix<real_ec, 3, 3> ExpansionCoefficients = Eigen::Map<const Eigen::Matrix<real_ec,3,3>>(EC.row(child_index).template segment<9>(12 + i*9).data());
+        igl::cross(
+                ExpansionCoefficients,
                 ThirdDerivative,
                 TempCoeffs);
 
         for (size_t j = 0; j < 3; ++j)
         {
-            wn += TempCoeffs.row(j);
+            wn -= TempCoeffs.row(j);
         }
       }
     }
@@ -381,15 +380,15 @@ IGL_INLINE void igl::fast_winding_number(
   int m = Q.rows();
   WN.resize(m,3);
 
-  std::function< real_wn(const RowVec & , const std::vector<int> &) > helper;
+  std::function< WnRowVec(const RowVec & , const std::vector<int> &) > helper;
   helper = [&helper,
             &P, &G,
             &point_indices,&CH,
             &CM,&R,&EC,&beta,
             &direct_eval,&expansion_eval]
-  (const RowVec & query, const std::vector<int> & near_indices)-> real_wn
+  (const RowVec & query, const std::vector<int> & near_indices)-> WnRowVec
   {
-    real_wn wn = 0;
+    WnRowVec wn(WnRowVec::Zero());
     std::vector<int> new_near_indices;
     new_near_indices.reserve(8);
     for(int i = 0; i < near_indices.size(); i++)
@@ -446,17 +445,17 @@ IGL_INLINE void igl::fast_winding_number(
   {
     const std::vector<int> near_indices_start = {0};
     igl::parallel_for(m,[&](int iter){
-      WN(iter) = helper(Q.row(iter).eval(),near_indices_start);
+      WN.row(iter) = helper(Q.row(iter).eval(), near_indices_start);
     },1000);
   } else 
   {
     igl::parallel_for(m,[&](int iter){
-      double wn = 0;
-      for(int j = 0; j <P.rows(); j++)
+      WnRowVec wn(WnRowVec::Zero());
+      for(int j = 0; j < P.rows(); j++)
       {
-        wn += direct_eval(P.row(j)-Q.row(iter),G.row(j));
+        wn += direct_eval(P.row(j) - Q.row(iter), G.row(j));
       }
-      WN(iter) = wn;
+      WN.row(iter) = wn;
     },1000);
   }
 }
@@ -468,7 +467,7 @@ template <
   typename BetaType, 
   typename DeltaType,
   typename DerivedWN>
-IGL_INLINE void igl::fast_winding_number(
+IGL_INLINE void igl::fast_winding_number_biot_savart(
   const Eigen::MatrixBase<DerivedP>& P,
   const Eigen::MatrixBase<DerivedG>& G,
   const Eigen::MatrixBase<DerivedQ>& Q,
@@ -490,8 +489,8 @@ IGL_INLINE void igl::fast_winding_number(
   Eigen::Matrix<real,Eigen::Dynamic,3> CM;
   Eigen::Matrix<real,Eigen::Dynamic,1> R;
 
-  fast_winding_number(P,G,point_indices,CH,expansion_order,CM,R,EC);
-  fast_winding_number(P,G,point_indices,CH,CM,R,EC,Q,beta,delta,WN);
+  fast_winding_number_biot_savart(P,G,point_indices,CH,expansion_order,CM,R,EC);
+  fast_winding_number_biot_savart(P,G,point_indices,CH,CM,R,EC,Q,beta,delta,WN);
 }
 
 template <
@@ -500,14 +499,14 @@ template <
   typename DerivedQ, 
   typename DerivedWN,
   typename DeltaType>
-IGL_INLINE void igl::fast_winding_number(
+IGL_INLINE void igl::fast_winding_number_biot_savart(
   const Eigen::MatrixBase<DerivedP>& P,
   const Eigen::MatrixBase<DerivedG>& G,
   const Eigen::MatrixBase<DerivedQ>& Q,
   DeltaType delta,
   Eigen::PlainObjectBase<DerivedWN>& WN)
 {
-  fast_winding_number(P,G,Q,2,2.0,delta,WN);
+  fast_winding_number_biot_savart(P,G,Q,2,2.0,delta,WN);
 }
 
 #endif
