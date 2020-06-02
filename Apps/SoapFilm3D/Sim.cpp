@@ -70,7 +70,9 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("damping-coef", 1.0);
     Options::addDoubleOption("sigma", 1.0);
     Options::addDoubleOption("gravity", 0.0);
-    Options::addBooleanOption("fmmtl", true);
+    Options::addStringOption("fast-summation" , "fmmtl");
+    Options::addDoubleOption("winding-beta", 2.);
+    Options::addIntegerOption("winding-expansion-order", 2);
     Options::addBooleanOption("looped", true);
     Options::addDoubleOption("radius", 5e-5);
     Options::addDoubleOption("density", 1.32e3);

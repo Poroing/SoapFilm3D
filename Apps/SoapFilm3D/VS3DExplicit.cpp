@@ -8,6 +8,7 @@
 
 #include "SimOptions.h"
 #include "VS3D.h"
+#include "fast_winding_number_biot_savart.h"
 
 #ifndef WIN32
 #include "fmmtl/fmmtl/Direct.hpp"
@@ -162,13 +163,6 @@ BiotSavart_fmmtl(VS3D& vs, const VecXd& dx)
         Vec3d gamma = -(e01 * vs.Gamma(t[2]).get(l) + e12 * vs.Gamma(t[0]).get(l)
                         + e20 * vs.Gamma(t[1]).get(l));
 
-        //            Vec3d dx = x - xp;
-        ////            double dxn = dx.norm();
-        //            double dxn = sqrt(dx.squaredNorm() + vs.delta() * vs.delta());
-        //
-        //            v += gamma.cross(dx) / (dxn * dxn * dxn);
-        ////            v += gamma.cross(dx) / (dxn * dxn * dxn) * (1 - exp(-dxn / m_delta));
-
         sources.push_back(Vec<3, double>(xp[0], xp[1], xp[2]));
         charges.push_back(Vec<3, double>(gamma[0], gamma[1], gamma[2]));
     }
@@ -195,6 +189,74 @@ BiotSavart_fmmtl(VS3D& vs, const VecXd& dx)
     return vel;
 }
 #endif
+
+VecXd
+BiotSavart_fast_winding_number(VS3D& vs, const VecXd& dx)
+{
+    Clock t1;
+
+    Eigen::MatrixX3d sources(Eigen::MatrixX3d::Zero(vs.mesh().nt(), 3));
+    Eigen::MatrixX3d charges(Eigen::MatrixX3d::Zero(vs.mesh().nt(), 3));
+    Eigen::MatrixX3d targets(Eigen::MatrixX3d::Zero(vs.mesh().nv(), 3));
+
+    for (size_t i = 0; i < vs.mesh().nv(); i++)
+    {
+        targets.row(i) = vs.pos(i);
+    }
+
+    for (size_t j = 0; j < vs.mesh().nt(); j++)
+    {
+        LosTopos::Vec3st t = vs.mesh().get_triangle(j);
+        if (vs.surfTrack()->vertex_is_any_solid(t[0]) && vs.surfTrack()->vertex_is_any_solid(t[1])
+            && vs.surfTrack()->vertex_is_any_solid(t[2]))
+            continue; // all-solid faces don't contribute vorticity.
+
+        LosTopos::Vec2i l = vs.mesh().get_triangle_label(j);
+        Vec3d x0 = vs.pos(t[0]) + dx.segment<3>(t[0] * 3);
+        Vec3d x1 = vs.pos(t[1]) + dx.segment<3>(t[1] * 3);
+        Vec3d x2 = vs.pos(t[2]) + dx.segment<3>(t[2] * 3);
+
+        Vec3d xp = (x0 + x1 + x2) / 3;
+
+        Vec3d e01 = x1 - x0;
+        Vec3d e12 = x2 - x1;
+        Vec3d e20 = x0 - x2;
+
+        Vec3d gamma = -(e01 * vs.Gamma(t[2]).get(l) + e12 * vs.Gamma(t[0]).get(l)
+                        + e20 * vs.Gamma(t[1]).get(l));
+
+        //            Vec3d dx = x - xp;
+        ////            double dxn = dx.norm();
+        //            double dxn = sqrt(dx.squaredNorm() + vs.delta() * vs.delta());
+        //
+        //            v += gamma.cross(dx) / (dxn * dxn * dxn);
+        ////            v += gamma.cross(dx) / (dxn * dxn * dxn) * (1 - exp(-dxn / m_delta));
+
+        sources.row(j) = xp;
+        charges.row(j) = gamma;
+    }
+
+    // Build the FMM
+    Eigen::MatrixX3d result;
+    igl::fast_winding_number_biot_savart(sources,
+                                         charges,
+                                         targets,
+                                         Options::intValue("winding-expansion-order"),
+                                         Options::doubleValue("winding-beta"),
+                                         vs.delta(),
+                                         result);
+
+    VecXd vel = VecXd::Zero(vs.mesh().nv() * 3);
+    for (size_t i = 0; i < vs.mesh().nv(); i++)
+    {
+        vel.segment<3>(i * 3) = result.row(i);
+    }
+
+    std::cout << "FastWindingExecution " << t1.seconds() << std::endl;
+
+    return vel;
+}
+
 VecXd
 BiotSavart(VS3D& vs, const VecXd& dx)
 {
@@ -203,11 +265,22 @@ BiotSavart(VS3D& vs, const VecXd& dx)
     std::cout << "NumberFaces " << vs.mesh().nt() << std::endl;
 
 #ifndef WIN32
-    if (Options::boolValue("fmmtl"))
+    if (Options::strValue("fast-summation") == "fmmtl")
+    {
         return BiotSavart_fmmtl(vs, dx);
+    }
     else
 #endif
+      if (Options::strValue("fast-summation") == "naive")
+    {
         return BiotSavart_naive(vs, dx);
+    }
+    else if (Options::strValue("fast-summation") == "winding")
+    {
+        return BiotSavart_fast_winding_number(vs, dx);
+    }
+
+    throw std::runtime_error("Non Implemented Fast Summation Method");
 }
 
 //#define FANGS_VERSION
