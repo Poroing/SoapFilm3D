@@ -1176,69 +1176,86 @@ bool EdgeCollapser::collapse_pass()
 
 bool EdgeCollapser::collapse_will_produce_irregular_junction(size_t edge)
 {
-    NonDestructiveTriMesh & mesh = m_surf.m_mesh;
-    
-    size_t a = mesh.m_edges[edge][0];
-    size_t b = mesh.m_edges[edge][1];
-    
-    std::vector<bool> regions;
-    for (size_t i = 0; i < mesh.m_vertex_to_triangle_map[a].size(); i++)
-    {
-        const Vec2i & l = mesh.get_triangle_label(mesh.m_vertex_to_triangle_map[a][i]);
-        if (l[0] >= 0)
-        {
-            if (l[0] >= (int)regions.size()) regions.resize(l[0] + 1, false);
-            regions[l[0]] = true;
-        }
-        if (l[1] >= 0)
-        {
-            if (l[1] >= (int)regions.size()) regions.resize(l[1] + 1, false);
-            regions[l[1]] = true;
-        }
-    }
-    for (size_t i = 0; i < mesh.m_vertex_to_triangle_map[b].size(); i++)
-    {
-        const Vec2i & l = mesh.get_triangle_label(mesh.m_vertex_to_triangle_map[b][i]);
-        if (l[0] >= 0)
-        {
-            if (l[0] >= (int)regions.size()) regions.resize(l[0] + 1, false);
-            regions[l[0]] = true;
-        }
-        if (l[1] >= 0)
-        {
-            if (l[1] >= (int)regions.size()) regions.resize(l[1] + 1, false);
-            regions[l[1]] = true;
-        }
-    }
-    
-    int nr = (int)regions.size();
-    bool * regiongraph = new bool[nr * nr];
-    memset(regiongraph, 0, sizeof(bool) * nr * nr);
-    for (size_t i = 0; i < mesh.m_vertex_to_triangle_map[a].size(); i++)
-    {
-        const Vec2i & l = mesh.get_triangle_label(mesh.m_vertex_to_triangle_map[a][i]);
-        if (l[0] >= 0 && l[1] >= 0)
-            regiongraph[l[0] * nr + l[1]] = regiongraph[l[1] * nr + l[0]] = true;
-    }
-    for (size_t i = 0; i < mesh.m_vertex_to_triangle_map[b].size(); i++)
-    {
-        const Vec2i & l = mesh.get_triangle_label(mesh.m_vertex_to_triangle_map[b][i]);
-        if (l[0] >= 0 && l[1] >= 0)
-            regiongraph[l[0] * nr + l[1]] = regiongraph[l[1] * nr + l[0]] = true;
-    }
-    
-    bool irregular = false;
-    for (int i = 0; i < nr; i++)
-        for (int j = i + 1; j < nr; j++)
-        {
-            if (regions[i] && regions[j])
-                if (!regiongraph[i * nr + j])
-                    irregular = true;
-        }
-    
-    delete []regiongraph;
-    
-    return irregular;
+   NonDestructiveTriMesh & mesh = m_surf.m_mesh;
+
+   size_t a = mesh.m_edges[edge][0];
+   size_t b = mesh.m_edges[edge][1];
+
+   
+   std::vector<int> regions; //list of regions that are present
+   
+   
+   //collect all incident regions
+   for (size_t i = 0; i < mesh.m_vertex_to_triangle_map[a].size(); i++)
+   {
+      const Vec2i & l = mesh.get_triangle_label(mesh.m_vertex_to_triangle_map[a][i]);
+      if (l[0] >= 0)
+      {
+         regions.push_back(l[0]);
+      }
+      if (l[1] >= 0)
+      {
+         regions.push_back(l[1]);
+      }
+   }
+
+   for (size_t i = 0; i < mesh.m_vertex_to_triangle_map[b].size(); i++)
+   {
+      const Vec2i & l = mesh.get_triangle_label(mesh.m_vertex_to_triangle_map[b][i]);
+      if (l[0] >= 0)
+      {
+         regions.push_back(l[0]);
+      }
+      if (l[1] >= 0)
+      {
+         regions.push_back(l[1]);
+      }
+   }
+
+   //remove duplicate regions
+   sort(regions.begin(), regions.end());
+   regions.erase(unique(regions.begin(), regions.end()), regions.end());
+   
+   //build a map from the region # to its position in the list above
+   int max_val = *(std::max_element(regions.begin(), regions.end()));
+   std::vector<int> reverse_map(max_val+1, -1); 
+   for (int i = 0; i < regions.size(); ++i)
+      reverse_map[regions[i]] = i;
+
+   //build a (local!) adjacency graph indicating which pairs of materials touch (by a face)
+   int nr = (int)regions.size();
+   bool * regiongraph = new bool[nr * nr];
+   memset(regiongraph, 0, sizeof(bool)* nr * nr);
+   for (size_t i = 0; i < mesh.m_vertex_to_triangle_map[a].size(); i++)
+   {
+      const Vec2i & l = mesh.get_triangle_label(mesh.m_vertex_to_triangle_map[a][i]);
+      if (l[0] >= 0 && l[1] >= 0) {
+         Vec2i local_label(reverse_map[l[0]], reverse_map[l[1]]);
+         regiongraph[local_label[0] * nr + local_label[1]] = regiongraph[local_label[1] * nr + local_label[0]] = true;
+      }
+   }
+   for (size_t i = 0; i < mesh.m_vertex_to_triangle_map[b].size(); i++)
+   {
+      const Vec2i & l = mesh.get_triangle_label(mesh.m_vertex_to_triangle_map[b][i]);
+      if (l[0] >= 0 && l[1] >= 0) {
+         Vec2i local_label(reverse_map[l[0]], reverse_map[l[1]]);
+         regiongraph[local_label[0] * nr + local_label[1]] = regiongraph[local_label[1] * nr + local_label[0]] = true;
+      }
+   }
+
+   bool irregular = false;
+   for (int i = 0; i < nr && !irregular; i++)
+   for (int j = i + 1; j < nr; j++)
+   {
+      if (!regiongraph[i * nr + j]) {
+         irregular = true;
+         break;
+      }
+   }
+   
+   delete[]regiongraph;
+
+   return irregular;
 }
     
 }

@@ -1,3 +1,6 @@
 [submodule "extern/libigl"]
 	path = extern/libigl
 	url = https://github.com/libigl/libigl.git
+[submodule "extern/MultiTracker"]
+	path = extern/MultiTracker
+	url = https://github.com/Poroing/MultiTracker.git

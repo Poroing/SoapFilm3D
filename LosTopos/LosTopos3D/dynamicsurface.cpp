@@ -64,12 +64,14 @@ DynamicSurface::DynamicSurface( const std::vector<Vec3d>& vertex_positions,
                                double in_proximity_epsilon,
                                double in_friction_coefficient,
                                bool in_collision_safety,
+   bool in_collision_safety_asserts,
                                bool in_verbose,
                                size_t maximum_timestep_cuts) :
 m_proximity_epsilon( in_proximity_epsilon ),
 m_verbose( in_verbose ),   
 m_collision_safety( in_collision_safety ),
 m_maximum_timestep_cuts( maximum_timestep_cuts ),
+m_collision_safety_asserts( m_collision_safety_asserts ),
 m_masses( masses ), 
 m_mesh(), 
 m_broad_phase( new BroadPhaseGrid() ),
@@ -751,7 +753,7 @@ int DynamicSurface::get_region_containing_point( const Vec3d& p )
 void DynamicSurface::integrate( double desired_dt, double& actual_dt )
 {     
     m_integration_had_collisions = false;
-    if ( m_collision_safety )
+    if ( m_collision_safety && m_collision_safety)
     {
       std::cout << "Checking collisions before integration.\n";
       assert_mesh_is_intersection_free( false );
@@ -873,7 +875,7 @@ void DynamicSurface::integrate( double desired_dt, double& actual_dt )
         // Set m_positions
         set_positions_to_newpositions();
         
-        if ( m_collision_safety )
+        if ( m_collision_safety && m_collision_safety_asserts )
         {
             assert_mesh_is_intersection_free( DEGEN_DOES_NOT_COUNT );
         }

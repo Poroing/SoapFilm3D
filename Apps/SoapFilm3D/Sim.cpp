@@ -103,6 +103,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
       0.02); // lostopos merge proximity epsilon (fraction of mean edge length)
     Options::addBooleanOption("lostopos-perform-smoothing",
                               false); // whether or not to perform smoothing
+    Options::addBooleanOption("lostopos-collision-safety-asserts", true);
     Options::addDoubleOption("lostopos-max-volume-change-fraction",
                              1e-4); // maximum allowed volume change during a remeshing operation
                                     // (fraction of mean edge length cubed)
