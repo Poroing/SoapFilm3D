@@ -225,13 +225,6 @@ BiotSavart_fast_winding_number(VS3D& vs, const VecXd& dx)
         Vec3d gamma = -(e01 * vs.Gamma(t[2]).get(l) + e12 * vs.Gamma(t[0]).get(l)
                         + e20 * vs.Gamma(t[1]).get(l));
 
-        //            Vec3d dx = x - xp;
-        ////            double dxn = dx.norm();
-        //            double dxn = sqrt(dx.squaredNorm() + vs.delta() * vs.delta());
-        //
-        //            v += gamma.cross(dx) / (dxn * dxn * dxn);
-        ////            v += gamma.cross(dx) / (dxn * dxn * dxn) * (1 - exp(-dxn / m_delta));
-
         sources.row(j) = xp;
         charges.row(j) = gamma;
     }
