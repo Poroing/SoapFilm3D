@@ -9,6 +9,7 @@ import itertools
 import functools
 import time
 import collections
+import os
 
 class FailedSimulation(Exception):
 
@@ -99,13 +100,15 @@ class SoapFilmSimulation(object):
             capture_stdout=True,
             timeout=None,
             retry_on_failed_initialization=False,
-            retry_on_not_enough_spheres=False
+            retry_on_not_enough_spheres=False,
+            profile=False
             ):
         self.capture_stdout = capture_stdout
         self.headless = headless
         self.timeout = timeout
         self.retry_on_failed_initialization = retry_on_failed_initialization
         self.retry_on_not_enough_spheres = retry_on_not_enough_spheres
+        self.profile = profile
 
         if config is None:
             config = SoapFilmSimulationConfigFile()
@@ -153,6 +156,10 @@ class SoapFilmSimulation(object):
 
     def run(self):
         number_tries = 1
+        environment_variable = {}
+        environment_variable.update(os.environ)
+        if self.profile:
+            environment_variable['CPUPROFILE'] = str(self.output_directory / 'prof.out')
         while True:
             print(f'Try {number_tries}')
             completed_process = subprocess.run(
@@ -163,7 +170,8 @@ class SoapFilmSimulation(object):
                     ],
                     capture_output=self.shouldCaptureStdout(),
                     text=True,
-                    timeout=self.timeout)
+                    timeout=self.timeout,
+                    env=environment_variable)
 
             if completed_process.returncode != 0:
                 if not SoapFilmSimulation.hasFinishedInit(completed_process.stdout):
@@ -298,6 +306,7 @@ if  __name__ == '__main__':
     argument_parser.add_argument('-t', '--simulation-time', type=float, default=4.0)
     argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
     argument_parser.add_argument('--no-save-stdout' , action='store_true')
+    argument_parser.add_argument('--profile', action='store_true')
     argument_parser.add_argument('--no-run', action='store_true',
         help='The simulaton is not run, only the configuration file is saved.')
     argument_parser.add_argument('--no-headless', action='store_true')
@@ -392,7 +401,8 @@ if  __name__ == '__main__':
                 headless=not args.no_headless,
                 timeout=timeout,
                 retry_on_failed_initialization=args.retry_on_failed_initialization,
-                retry_on_not_enough_spheres=args.retry_on_not_enough_spheres)
+                retry_on_not_enough_spheres=args.retry_on_not_enough_spheres,
+                profile=args.profile)
 
         if args.no_run:
             continue
