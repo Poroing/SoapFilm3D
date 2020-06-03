@@ -80,15 +80,14 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("bending", 250.0);
     Options::addStringOption("smoothing-type", "laplacian");
 
-    Options::addBooleanOption("print-pre-and-post-t1-gamma", false);
+    Options::addBooleanOption("print-t1-info", false);
 
     Options::addStringOption("output-dir", "_");
     Options::addBooleanOption("output-png", true);
     Options::addIntegerOption("output-png-every-n-frames",
                               0); // 0 means synching with simulation frame rate (equivalent to 1).
     Options::addBooleanOption("output-mesh", false);
-    Options::addIntegerOption("output-mesh-every-n-frames",
-                              0); // 0 means synching with simulation frame rate (equivalent to 1).
+    Options::addIntegerOption("output-mesh-every-n-frames", 0); // 0 means synching with simulation frame rate (equivalent to 1).
     Options::addBooleanOption("output-obj", false);
     Options::addIntegerOption("output-obj-every-n-frames",
                               0); // 0 means synching with simulation frame rate (equivalent to 1).

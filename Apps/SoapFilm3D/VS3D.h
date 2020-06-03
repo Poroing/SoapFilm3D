@@ -238,9 +238,10 @@ class VS3D
      */
     std::vector<std::vector<Vec2i>> getVerticesIncidentRegionPairs() const;
     /**
-     *  Returns the pair of regions incident to the given vertex. The pairs are garanted to have
-     *  the region with the lowest index as first element.
-     */
+     *  Returns the regions incident to the triangle incident to the given vertex. Each pair has the
+     *  region with the lowest index first. Each pair is only present once. Note that this is
+     *  different from taking every pair of regions incident to the vertex.
+.    */
     std::vector<Vec2i> getVertexIncidentRegionPairs(size_t vertex_index) const;
     std::vector<int> getVertexIncidentRegions(size_t vertex_index) const;
     Vec3i getTriangleWithNormalTowardRegionWithSmallerIndex(size_t triangle_index) const;
