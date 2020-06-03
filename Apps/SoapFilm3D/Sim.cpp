@@ -80,6 +80,8 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("bending", 250.0);
     Options::addStringOption("smoothing-type", "laplacian");
 
+    Options::addBooleanOption("print-pre-and-post-t1-gamma", false);
+
     Options::addStringOption("output-dir", "_");
     Options::addBooleanOption("output-png", true);
     Options::addIntegerOption("output-png-every-n-frames",
