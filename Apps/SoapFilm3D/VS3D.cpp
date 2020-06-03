@@ -25,8 +25,8 @@
 #include <igl/cotmatrix.h>
 #include <igl/massmatrix.h>
 
-#include <boost/range/algorithm/find.hpp>
 #include <boost/range/algorithm/copy.hpp>
+#include <boost/range/algorithm/find.hpp>
 #include <boost/range/algorithm/sort.hpp>
 #include <boost/range/algorithm/unique.hpp>
 #include <boost/range/algorithm_ext/erase.hpp>
@@ -760,7 +760,8 @@ VS3D::biharmonicSmoothing(double dt)
 void
 VS3D::umbrellaSmoothing(double dt)
 {
-    std::vector<std::vector<Vec2i>> vertices_incident_region_pairs = getVerticesIncidentRegionPairs();
+    std::vector<std::vector<Vec2i>> vertices_incident_region_pairs =
+      getVerticesIncidentRegionPairs();
 
     // Store the vertices new circulation in the upper triangle of matrices
     std::vector<std::vector<double>> new_gammas(mesh().nv());
@@ -770,14 +771,17 @@ VS3D::umbrellaSmoothing(double dt)
     }
 
     auto is_incident_to_region_pair = [&vertices_incident_region_pairs](size_t vertex_index,
-                                                                   const Vec2i& region_pair) {
-        std::vector<Vec2i>& vertex_incident_region_pairs = vertices_incident_region_pairs[vertex_index];
-        return boost::find(vertex_incident_region_pairs, region_pair) != vertex_incident_region_pairs.end();
+                                                                        const Vec2i& region_pair) {
+        std::vector<Vec2i>& vertex_incident_region_pairs =
+          vertices_incident_region_pairs[vertex_index];
+        return boost::find(vertex_incident_region_pairs, region_pair)
+               != vertex_incident_region_pairs.end();
     };
 
     for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
     {
-        std::vector<Vec2i>& vertex_incident_region_pairs = vertices_incident_region_pairs[vertex_index];
+        std::vector<Vec2i>& vertex_incident_region_pairs =
+          vertices_incident_region_pairs[vertex_index];
         for (size_t region_pair_index : boost::irange(0lu, vertex_incident_region_pairs.size()))
         {
             Vec2i& region_pair = vertex_incident_region_pairs[region_pair_index];
@@ -789,8 +793,8 @@ VS3D::umbrellaSmoothing(double dt)
                     continue;
                 }
 
-                umbrella_laplacian +=
-                  Gamma(adjacent_vertex_index).get(region_pair) - Gamma(vertex_index).get(region_pair);
+                umbrella_laplacian += Gamma(adjacent_vertex_index).get(region_pair)
+                                      - Gamma(vertex_index).get(region_pair);
             }
 
             umbrella_laplacian /= getVertexAreaIncidentToRegionPair(vertex_index, region_pair);
@@ -802,7 +806,8 @@ VS3D::umbrellaSmoothing(double dt)
 
     for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
     {
-        std::vector<Vec2i>& vertex_incident_region_pairs = vertices_incident_region_pairs[vertex_index];
+        std::vector<Vec2i>& vertex_incident_region_pairs =
+          vertices_incident_region_pairs[vertex_index];
         for (size_t region_pair_index : boost::irange(0lu, vertex_incident_region_pairs.size()))
         {
             Vec2i& region_pair = vertex_incident_region_pairs[region_pair_index];
@@ -861,7 +866,8 @@ VS3D::getVerticesIncidentRegionsPairTensor() const
     return incident_region_pairs;
 }
 
-std::vector<std::vector<Vec2i>> VS3D::getVerticesIncidentRegionPairs() const
+std::vector<std::vector<Vec2i>>
+VS3D::getVerticesIncidentRegionPairs() const
 {
     std::vector<std::vector<Vec2i>> incident_region_pairs(mesh().nv());
     for (size_t i = 0; i < mesh().nt(); i++)
@@ -882,9 +888,8 @@ std::vector<std::vector<Vec2i>> VS3D::getVerticesIncidentRegionPairs() const
     for (std::vector<Vec2i>& vertex_incident_region_pairs : incident_region_pairs)
     {
         boost::sort(vertex_incident_region_pairs, Vec2iComp());
-        boost::erase(
-                vertex_incident_region_pairs,
-                boost::unique<boost::return_found_end>(vertex_incident_region_pairs));
+        boost::erase(vertex_incident_region_pairs,
+                     boost::unique<boost::return_found_end>(vertex_incident_region_pairs));
     }
 
     return incident_region_pairs;
@@ -1147,7 +1152,6 @@ VS3D::improveMesh(size_t number_iteration)
         std::cout << " " << number_vertices;
     }
     std::cout << std::endl;
-
 }
 
 void
@@ -2125,7 +2129,10 @@ VS3D::post_t1(const LosTopos::SurfTrack& st, size_t v, size_t a, size_t b, void*
     (*m_Gamma)[a] = (*m_Gamma)[v];
     (*m_Gamma)[b] = (*m_Gamma)[v];
 
-    std::cout << "v Gammas: " << std::endl << (*m_Gamma)[v].values << std::endl;
+    if (Options::boolValue("print-pre-and-post-t1-gamma"))
+    {
+        std::cout << "v Gammas: " << std::endl << (*m_Gamma)[v].values << std::endl;
+    }
 
     for (size_t i = 0; i < td->neighbor_verts.size(); i++)
     {
@@ -2150,7 +2157,10 @@ VS3D::post_t1(const LosTopos::SurfTrack& st, size_t v, size_t a, size_t b, void*
                 if (rps(j, k) && !td->neighbor_region_pairs[i](j, k))
                     (*m_Gamma)[vother].set(j, k, (*m_Gamma)[v].get(j, k));
 
-        std::cout << "Gammas: " << std::endl << (*m_Gamma)[vother].values << std::endl;
+        if (Options::boolValue("print-pre-and-post-t1-gamma"))
+        {
+            std::cout << "Gammas: " << std::endl << (*m_Gamma)[vother].values << std::endl;
+        }
     }
 }
 
