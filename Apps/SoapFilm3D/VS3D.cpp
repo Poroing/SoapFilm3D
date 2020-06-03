@@ -1455,17 +1455,20 @@ std::vector<Vec2i>
 VS3D::getVertexIncidentRegionPairs(size_t vertex_index) const
 {
     std::vector<Vec2i> incident_region_pairs;
-    std::vector<int> incident_regions = getVertexIncidentRegions(vertex_index);
-    for (size_t region_a_index : boost::irange(0lu, incident_regions.size()))
+    for (size_t incident_triangle : mesh().m_vertex_to_triangle_map[vertex_index])
     {
-        for (size_t region_b_index : boost::irange(region_a_index + 1, incident_regions.size()))
+        LosTopos::Vec2i region_pair = mesh().get_triangle_label(incident_triangle);
+        if (region_pair[0] > region_pair[1])
         {
-            size_t region_a = region_a_index;
-            size_t region_b = region_b_index;
-            incident_region_pairs.emplace_back(std::max(region_a, region_b),
-                                               std::min(region_a, region_b));
+            std::swap(region_pair[0], region_pair[1]);
         }
+        incident_region_pairs.push_back(vc(region_pair));
     }
+
+    boost::sort(incident_region_pairs, Vec2iComp());
+    boost::erase(incident_region_pairs,
+                 boost::unique<boost::return_found_end>(incident_region_pairs));
+
     return incident_region_pairs;
 }
 
@@ -2091,8 +2094,9 @@ VS3D::post_flip(const LosTopos::SurfTrack& st, size_t e, void* data)
 
 struct T1TempData
 {
+    std::vector<Vec2i> incident_region_pairs;
     std::vector<size_t> neighbor_verts;
-    std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> neighbor_region_pairs;
+    std::vector<std::vector<Vec2i>> neighbor_region_pairs;
 };
 
 void
@@ -2100,21 +2104,12 @@ VS3D::pre_t1(const LosTopos::SurfTrack& st, size_t v, void** data)
 {
     T1TempData* td = new T1TempData;
 
-    for (size_t i = 0; i < st.m_mesh.m_vertex_to_edge_map[v].size(); i++)
-    {
-        LosTopos::Vec2st e = st.m_mesh.m_edges[st.m_mesh.m_vertex_to_edge_map[v][i]];
-        size_t vother = (e[0] == v ? e[1] : e[0]);
-        td->neighbor_verts.push_back(vother);
+    td->incident_region_pairs = getVertexIncidentRegionPairs(v);
 
-        Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> rps;
-        rps.setZero(m_nregion, m_nregion);
-        for (size_t j = 0; j < st.m_mesh.m_vertex_to_triangle_map[vother].size(); j++)
-        {
-            LosTopos::Vec2i l =
-              st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[vother][j]);
-            rps(l[0], l[1]) = rps(l[1], l[0]) = true;
-        }
-        td->neighbor_region_pairs.push_back(rps);
+    for (size_t adjacent_vertex : getVertexAdjacentVertices(v))
+    {
+        td->neighbor_verts.push_back(adjacent_vertex);
+        td->neighbor_region_pairs.push_back(getVertexIncidentRegionPairs(adjacent_vertex));
     }
 
     *data = (void*)td;
@@ -2126,40 +2121,31 @@ VS3D::post_t1(const LosTopos::SurfTrack& st, size_t v, size_t a, size_t b, void*
     std::cout << "v = " << v << " -> " << a << " " << b << std::endl;
     T1TempData* td = (T1TempData*)data;
 
-    (*m_Gamma)[a] = (*m_Gamma)[v];
-    (*m_Gamma)[b] = (*m_Gamma)[v];
+#warning quadratic complexity
+    Gamma(a) = Gamma(v);
+    Gamma(b) = Gamma(v);
 
-    if (Options::boolValue("print-pre-and-post-t1-gamma"))
+    if (Options::boolValue("print-t1-info"))
     {
-        std::cout << "v Gammas: " << std::endl << (*m_Gamma)[v].values << std::endl;
+        std::cout << "v Gammas: " << std::endl << Gamma(v).values << std::endl;
     }
 
-    for (size_t i = 0; i < td->neighbor_verts.size(); i++)
+    for (size_t vother_index = 0; vother_index < td->neighbor_verts.size(); ++vother_index)
     {
-        size_t vother = td->neighbor_verts[i];
+        size_t previously_adjacent_vertex = td->neighbor_verts[vother_index];
+        const std::vector<Vec2i>& previously_incident_region_pairs = td->neighbor_region_pairs[vother_index];
+        std::vector<Vec2i> currently_incident_region_pairs = getVertexIncidentRegionPairs(previously_adjacent_vertex);
 
-        Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> rps;
-        rps.setZero(m_nregion, m_nregion);
-        for (size_t j = 0; j < st.m_mesh.m_vertex_to_triangle_map[vother].size(); j++)
+        for (const Vec2i& region_pair : currently_incident_region_pairs)
         {
-            LosTopos::Vec2i l =
-              st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[vother][j]);
-            rps(l[0], l[1]) = rps(l[1], l[0]) = true;
+            if (boost::find(previously_incident_region_pairs, region_pair) == previously_incident_region_pairs.end() )
+                Gamma(previously_adjacent_vertex).set(region_pair, Gamma(v).get(region_pair));
+
         }
 
-        std::cout << vother << std::endl
-                  << td->neighbor_region_pairs[i] << std::endl
-                  << "-> " << std::endl
-                  << rps << std::endl;
-
-        for (int j = 0; j < m_nregion; j++)
-            for (int k = j + 1; k < m_nregion; k++)
-                if (rps(j, k) && !td->neighbor_region_pairs[i](j, k))
-                    (*m_Gamma)[vother].set(j, k, (*m_Gamma)[v].get(j, k));
-
-        if (Options::boolValue("print-pre-and-post-t1-gamma"))
+        if (Options::boolValue("print-t1-info"))
         {
-            std::cout << "Gammas: " << std::endl << (*m_Gamma)[vother].values << std::endl;
+            std::cout << "Gammas: " << std::endl << Gamma(previously_adjacent_vertex).values << std::endl;
         }
     }
 }
