@@ -78,6 +78,7 @@ m_perform_smoothing( true ),
 m_merge_proximity_epsilon( 1e-5 ),
 m_subdivision_scheme(NULL),
 m_collision_safety(true),
+m_collision_safety_asserts(true),
 m_allow_topology_changes(true),
 m_allow_non_manifold(true),
 m_perform_improvement(true),
@@ -111,6 +112,7 @@ DynamicSurface( vs,
                initial_parameters.m_proximity_epsilon,
                initial_parameters.m_friction_coefficient,
                initial_parameters.m_collision_safety,
+               initial_parameters.m_collision_safety_asserts,
                initial_parameters.m_verbose,
                initial_parameters.m_maximum_timestep_cuts),
 
@@ -911,19 +913,21 @@ bool SurfTrack::triangle_with_bad_angle(size_t i)
     Vec3d v1 = get_position(tri[1]);
     Vec3d v2 = get_position(tri[2]);
     
-    double min_angle = min_triangle_angle(v0,v1,v2);
-    double max_angle = max_triangle_angle(v0,v1,v2);
+    //do these computations in cos to avoid costly arccos
+    Vec2d minmaxcos;
+    min_and_max_triangle_angle_cosines(v0, v1, v2, minmaxcos);
+    double min_cos = minmaxcos[0];
+    double max_cos = minmaxcos[1];
+    assert(min_cos == min_cos);
+    assert(max_cos == max_cos);
+    assert(max_cos < 1.000001);
+    assert(min_cos > -1.000001);
+
+    bool any_bad_cos = min_cos < m_min_angle_cosine || max_cos >= m_max_angle_cosine;
     
-    //these simply must be true at all times
-    assert(min_angle >= 0);
-    assert(max_angle < 1.000001*M_PI);
-    assert(min_angle == min_angle);
-    assert(max_angle == max_angle);
-    
-    //if any triangles are outside our bounds, we have to keep going.
-    
-    if (rad2deg(min_angle) < m_min_triangle_angle || rad2deg(max_angle) >= m_max_triangle_angle)
-        return true;
+    if (any_bad_cos)
+       return true;
+
     return false;
 }
 
@@ -1239,7 +1243,7 @@ void SurfTrack::improve_mesh( )
 //        assert_no_bad_labels();
         
         std::cout << "Done improvement\n" << std::endl;
-        if ( m_collision_safety )
+        if ( m_collision_safety && m_collision_safety_asserts )
         {
             assert_mesh_is_intersection_free( false );
         }      
@@ -1255,7 +1259,7 @@ void SurfTrack::cut_mesh( const std::vector< std::pair<size_t,size_t> >& edges)
     // edge cutting
     m_cutter.separate_edges_new(edges);
     
-    if ( m_collision_safety )
+    if ( m_collision_safety && m_collision_safety_asserts )
     {
         //std::cout << "Checking collisions after cutting.\n";
         assert_mesh_is_intersection_free( false );
@@ -1285,7 +1289,7 @@ void SurfTrack::topology_changes( )
     if (m_mesheventcallback)
         m_mesheventcallback->log() << "Snap pass finished" << std::endl;
     
-    if ( m_collision_safety )
+    if ( m_collision_safety && m_collision_safety_asserts )
     {
         assert_mesh_is_intersection_free( false );
     }

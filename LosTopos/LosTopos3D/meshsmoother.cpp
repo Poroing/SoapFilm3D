@@ -725,15 +725,18 @@ bool MeshSmoother::null_space_smoothing_pass( double dt )
             Vec3d v0 = m_surf.get_position(tri[0]);
             Vec3d v1 = m_surf.get_position(tri[1]);
             Vec3d v2 = m_surf.get_position(tri[2]);
-            Vec3d angles;
-            triangle_angles(v0, v1, v2, angles[0], angles[1], angles[2]);
             
-            //switch angle modes
-            angles[0] = rad2deg(angles[0]); angles[1] = rad2deg(angles[1]); angles[2] = rad2deg(angles[2]);
+            ////check for bad angles
+           
+            //check for bad angle *cosines* (instead of angles, which requires a slow acos call)
+            Vec3d cos_angles;
+            triangle_angle_cosines(v0, v1, v2, cos_angles[0], cos_angles[1], cos_angles[2]);
+
+            bool any_bad_angles_cos = cos_angles[0] < m_surf.m_min_angle_cosine || cos_angles[0] > m_surf.m_max_angle_cosine ||
+                                      cos_angles[1] < m_surf.m_min_angle_cosine || cos_angles[1] > m_surf.m_max_angle_cosine ||
+                                      cos_angles[2] < m_surf.m_min_angle_cosine || cos_angles[2] > m_surf.m_max_angle_cosine;
             
-            if(angles[0] < m_surf.m_min_triangle_angle || angles[0] > m_surf.m_max_triangle_angle ||
-               angles[1] < m_surf.m_min_triangle_angle || angles[1] > m_surf.m_max_triangle_angle ||
-               angles[2] < m_surf.m_min_triangle_angle || angles[2] > m_surf.m_max_triangle_angle) 
+            if (any_bad_angles_cos)
             {
                 //std::cout << "Bad triangle angles: " << angles << std::endl;
                 for(int j = 0; j < 3; ++j) {

@@ -87,6 +87,7 @@ public:
        double in_proximity_epsilon = 1e-4,
        double in_friction_coefficient = 0.0,
        bool in_collision_safety = true,
+       bool in_collision_safety_asserts = true,
        bool in_verbose = false,
        size_t maximum_timestep_cuts = std::numeric_limits<size_t>::max() );
     
@@ -438,6 +439,10 @@ public:
 
     size_t m_maximum_timestep_cuts;
     
+    /// Extra costly checks to ensure intersection free mesh after major remeshing loops
+    ///
+    bool m_collision_safety_asserts;
+
     /// Vertex positions, predicted locations, velocities and masses
     ///
     std::vector<Vec3d> m_masses;

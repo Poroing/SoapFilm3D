@@ -142,6 +142,10 @@ struct SurfTrackInitializationParameters
     ///
     bool m_collision_safety;
     
+    /// Whether to employ extra asserts to verify collision-safety
+    ///
+    bool m_collision_safety_asserts;
+
     /// Whether to allow changes in topology
     ///
     bool m_allow_topology_changes;
@@ -619,6 +623,14 @@ public:
     ///
     double m_max_triangle_angle;
     
+    /// Don't create triangles with angles less than this.  Use cosine so we can just compare to dot product. Should match angles above.
+    ///
+    double m_min_angle_cosine;
+
+    /// Don't create triangles with angles greater than this. Use cosine so we can just compare to dot product. Should match angles above.
+    ///
+    double m_max_angle_cosine;
+
     /// Some weaker bounds to use in aggressive mode.
     ///
     double m_hard_min_edge_len, m_hard_max_edge_len;
