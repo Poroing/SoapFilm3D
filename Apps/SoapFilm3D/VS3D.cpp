@@ -1256,6 +1256,13 @@ VS3D::getTriangleCenter(size_t triangle_index) const
 }
 
 Vec3d
+VS3D::getTranslatedTriangleCenter(size_t triangle_index, const VecXd& dx) const
+{
+    LosTopos::Vec3st t = mesh().get_triangle(triangle_index);
+    return (getTranslatedPosition(t[0], dx) + getTranslatedPosition(t[1], dx) + getTranslatedPosition(t[2], dx)) / 3;
+}
+
+Vec3d
 VS3D::getVertexOppositeEdgeInTriangle(size_t vertex_index, size_t triangle_index) const
 {
     LosTopos::Vec3st triangle = mesh().get_triangle(triangle_index);
@@ -1372,6 +1379,20 @@ VS3D::getTriangleSheetStrength(size_t triangle_index) const
     Vec3d e01 = pos(triangle[1]) - pos(triangle[0]);
     Vec3d e12 = pos(triangle[2]) - pos(triangle[1]);
     Vec3d e20 = pos(triangle[0]) - pos(triangle[2]);
+
+    return -(e01 * (*m_Gamma)[triangle[2]].get(incident_regions)
+             + e12 * (*m_Gamma)[triangle[0]].get(incident_regions)
+             + e20 * (*m_Gamma)[triangle[1]].get(incident_regions));
+}
+
+Vec3d
+VS3D::getTranslatedTriangleSheetStrength(size_t triangle_index, const VecXd& dx) const
+{
+    LosTopos::Vec3st triangle = mesh().get_triangle(triangle_index);
+    LosTopos::Vec2i incident_regions = mesh().get_triangle_label(triangle_index);
+    Vec3d e01 = getTranslatedPosition(triangle[1], dx) - getTranslatedPosition(triangle[0], dx);
+    Vec3d e12 = getTranslatedPosition(triangle[2], dx) - getTranslatedPosition(triangle[1], dx);
+    Vec3d e20 = getTranslatedPosition(triangle[0], dx) - getTranslatedPosition(triangle[2], dx);
 
     return -(e01 * (*m_Gamma)[triangle[2]].get(incident_regions)
              + e12 * (*m_Gamma)[triangle[0]].get(incident_regions)

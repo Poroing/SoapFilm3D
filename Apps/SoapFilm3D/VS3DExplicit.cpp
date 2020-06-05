@@ -9,6 +9,7 @@
 #include "SimOptions.h"
 #include "VS3D.h"
 #include "fast_winding_number_biot_savart.h"
+#include <boost/range/algorithm/transform.hpp>
 
 #ifndef WIN32
 #include "fmmtl/fmmtl/Direct.hpp"
@@ -40,69 +41,34 @@ angleAroundAxis(const Vec3d& v0,
 }
 
 VecXd
-BiotSavart_naive(VS3D& vs, const VecXd& dx)
+BiotSavart_naive(const std::vector<Vec3d>& sources,
+                 const std::vector<Vec3d>& targets,
+                 const std::vector<Vec3d>& charges,
+                 double delta)
 {
     Clock t1;
-    VecXd vel = VecXd::Zero(vs.mesh().nv() * 3);
+    VecXd vel = VecXd::Zero(targets.size() * 3);
 #pragma omp parallel
     {
 #pragma omp for nowait
-        for (size_t i = 0; i < vs.mesh().nv(); i++)
+        for (size_t target_index : boost::irange(0lu, targets.size()))
         {
             Vec3d v(0, 0, 0);
-            Vec3d x = vs.pos(i);
+            const Vec3d& target = targets[target_index];
 
-            for (size_t j = 0; j < vs.mesh().nt(); j++)
+            for (size_t source_index : boost::irange(0lu, sources.size()))
             {
-                LosTopos::Vec3st t = vs.mesh().get_triangle(j);
-                if (vs.surfTrack()->vertex_is_any_solid(t[0])
-                    && vs.surfTrack()->vertex_is_any_solid(t[1])
-                    && vs.surfTrack()->vertex_is_any_solid(t[2]))
-                    continue; // all-solid faces don't contribute vorticity.
 
-                LosTopos::Vec2i l = vs.mesh().get_triangle_label(j);
-                Vec3d x0 = vs.pos(t[0]) + dx.segment<3>(t[0] * 3);
-                Vec3d x1 = vs.pos(t[1]) + dx.segment<3>(t[1] * 3);
-                Vec3d x2 = vs.pos(t[2]) + dx.segment<3>(t[2] * 3);
+                const Vec3d& source = sources[source_index];
 
-                Vec3d xp = (x0 + x1 + x2) / 3;
+                Vec3d dx = target - source;
+                double dxn = sqrt(dx.squaredNorm() + delta * delta);
 
-                Vec3d e01 = x1 - x0;
-                Vec3d e12 = x2 - x1;
-                Vec3d e20 = x0 - x2;
-
-                Vec3d gamma = -(e01 * vs.Gamma(t[2]).get(l) + e12 * vs.Gamma(t[0]).get(l)
-                                + e20 * vs.Gamma(t[1]).get(l));
-
-                Vec3d dx = x - xp;
-                //                double dxn = dx.norm();
-                double dxn = sqrt(dx.squaredNorm() + vs.delta() * vs.delta());
-
-                v += gamma.cross(dx) / (dxn * dxn * dxn);
-                //                v += gamma.cross(dx) / (dxn * dxn * dxn) * (1 - exp(-dxn /
-                //                m_delta));
-            }
-
-            // open boundary extra face contributions
-            if (vs.m_obefv.size() == vs.m_obefe.size() && vs.m_obefv.size() == vs.m_obefc.size())
-            {
-                for (size_t j = 0; j < vs.m_obefv.size(); j++)
-                {
-                    Vec3d gamma = vs.m_obefe[j] * vs.m_obefv[j];
-                    Vec3d xp = vs.m_obefc[j];
-
-                    Vec3d dx = x - xp;
-                    //                    double dxn = dx.norm();
-                    double dxn = sqrt(dx.squaredNorm() + vs.delta() * vs.delta());
-
-                    v += gamma.cross(dx) / (dxn * dxn * dxn);
-                    //                    v += gamma.cross(dx) / (dxn * dxn * dxn) * (1 - exp(-dxn /
-                    //                    m_delta));
-                }
+                v += charges[source_index].cross(dx) / (dxn * dxn * dxn);
             }
 
             v /= (4 * M_PI);
-            vel.segment<3>(i * 3) = v;
+            vel.segment<3>(target_index * 3) = v;
         }
     }
 
@@ -112,18 +78,20 @@ BiotSavart_naive(VS3D& vs, const VecXd& dx)
 }
 #ifndef WIN32
 VecXd
-BiotSavart_fmmtl(VS3D& vs, const VecXd& dx)
+BiotSavart_fmmtl(const std::vector<Vec3d>& sources,
+                 const std::vector<Vec3d>& targets,
+                 const std::vector<Vec3d>& charges,
+                 double delta)
 {
     // code adapted from FMMTL example test "error_biot.cpp"
 
     Clock t1;
     // Init the FMM Kernel and options
-    FMMOptions opts = get_options(0, NULL);
     //        typedef BiotSpherical kernel_type;
     typedef RMSpherical kernel_type;
 
     // Init kernel
-    kernel_type K(vs.delta());
+    kernel_type K(delta);
 
     typedef kernel_type::point_type point_type;
     typedef kernel_type::source_type source_type;
@@ -132,54 +100,29 @@ BiotSavart_fmmtl(VS3D& vs, const VecXd& dx)
     typedef kernel_type::result_type result_type;
 
     // Init points and charges
-    std::vector<source_type> sources;
-    std::vector<target_type> targets;
-    std::vector<charge_type> charges;
+    std::vector<source_type> fmmtl_sources;
+    std::vector<target_type> fmmtl_targets;
+    std::vector<charge_type> fmmtl_charges;
 
-    for (size_t i = 0; i < vs.mesh().nv(); i++)
-    {
-        Vec3d x = vs.pos(i);
-        targets.push_back(Vec<3, double>(x[0], x[1], x[2]));
-    }
-
-    for (size_t j = 0; j < vs.mesh().nt(); j++)
-    {
-        LosTopos::Vec3st t = vs.mesh().get_triangle(j);
-        if (vs.surfTrack()->vertex_is_any_solid(t[0]) && vs.surfTrack()->vertex_is_any_solid(t[1])
-            && vs.surfTrack()->vertex_is_any_solid(t[2]))
-            continue; // all-solid faces don't contribute vorticity.
-
-        LosTopos::Vec2i l = vs.mesh().get_triangle_label(j);
-        Vec3d x0 = vs.pos(t[0]) + dx.segment<3>(t[0] * 3);
-        Vec3d x1 = vs.pos(t[1]) + dx.segment<3>(t[1] * 3);
-        Vec3d x2 = vs.pos(t[2]) + dx.segment<3>(t[2] * 3);
-
-        Vec3d xp = (x0 + x1 + x2) / 3;
-
-        Vec3d e01 = x1 - x0;
-        Vec3d e12 = x2 - x1;
-        Vec3d e20 = x0 - x2;
-
-        Vec3d gamma = -(e01 * vs.Gamma(t[2]).get(l) + e12 * vs.Gamma(t[0]).get(l)
-                        + e20 * vs.Gamma(t[1]).get(l));
-
-        sources.push_back(Vec<3, double>(xp[0], xp[1], xp[2]));
-        charges.push_back(Vec<3, double>(gamma[0], gamma[1], gamma[2]));
-    }
+    auto convert_to_fmmtl = [](const Vec3d& v) { return Vec<3, double>(v[0], v[1], v[2]); };
+    boost::transform(sources, std::back_inserter(fmmtl_sources), convert_to_fmmtl);
+    boost::transform(targets, std::back_inserter(fmmtl_targets), convert_to_fmmtl);
+    boost::transform(charges, std::back_inserter(fmmtl_charges), convert_to_fmmtl);
 
     // Build the FMM
-    fmmtl::kernel_matrix<kernel_type> A = K(targets, sources);
+    fmmtl::kernel_matrix<kernel_type> A = K(fmmtl_targets, fmmtl_sources);
+    FMMOptions opts = get_options(0, NULL);
     A.set_options(opts);
 
     // Execute the FMM
-    std::vector<result_type> result = A * charges;
+    std::vector<result_type> result = A * fmmtl_charges;
 
-    VecXd vel = VecXd::Zero(vs.mesh().nv() * 3);
-    for (size_t i = 0; i < vs.mesh().nv(); i++)
+    VecXd vel = VecXd::Zero(targets.size() * 3);
+    for (size_t target_index : boost::irange(0lu, targets.size()))
     {
-        vel[i * 3 + 0] = result[i][0];
-        vel[i * 3 + 1] = result[i][1];
-        vel[i * 3 + 2] = result[i][2];
+        vel[target_index * 3 + 0] = result[target_index][0];
+        vel[target_index * 3 + 1] = result[target_index][1];
+        vel[target_index * 3 + 2] = result[target_index][2];
     }
 
     vel /= (4 * M_PI);
@@ -191,61 +134,41 @@ BiotSavart_fmmtl(VS3D& vs, const VecXd& dx)
 #endif
 
 VecXd
-BiotSavart_fast_winding_number(VS3D& vs, const VecXd& dx)
+BiotSavart_fast_winding_number(const std::vector<Vec3d>& sources,
+                 const std::vector<Vec3d>& targets,
+                 const std::vector<Vec3d>& charges,
+                 double delta)
 {
-    Clock t1;
+    Eigen::MatrixX3d libigl_sources(Eigen::MatrixX3d::Zero(sources.size(), 3));
+    Eigen::MatrixX3d libigl_charges(Eigen::MatrixX3d::Zero(charges.size(), 3));
+    Eigen::MatrixX3d libigl_targets(Eigen::MatrixX3d::Zero(targets.size(), 3));
 
-    Eigen::MatrixX3d sources(Eigen::MatrixX3d::Zero(vs.mesh().nt(), 3));
-    Eigen::MatrixX3d charges(Eigen::MatrixX3d::Zero(vs.mesh().nt(), 3));
-    Eigen::MatrixX3d targets(Eigen::MatrixX3d::Zero(vs.mesh().nv(), 3));
-
-    for (size_t i = 0; i < vs.mesh().nv(); i++)
+    for (size_t target_index : boost::irange(0lu, targets.size()))
     {
-        targets.row(i) = vs.pos(i);
+        libigl_targets.row(target_index) = targets[target_index];
     }
 
-    for (size_t j = 0; j < vs.mesh().nt(); j++)
+    for (size_t source_index : boost::irange(0lu, sources.size()))
     {
-        LosTopos::Vec3st t = vs.mesh().get_triangle(j);
-        if (vs.surfTrack()->vertex_is_any_solid(t[0]) && vs.surfTrack()->vertex_is_any_solid(t[1])
-            && vs.surfTrack()->vertex_is_any_solid(t[2]))
-            continue; // all-solid faces don't contribute vorticity.
-
-        LosTopos::Vec2i l = vs.mesh().get_triangle_label(j);
-        Vec3d x0 = vs.pos(t[0]) + dx.segment<3>(t[0] * 3);
-        Vec3d x1 = vs.pos(t[1]) + dx.segment<3>(t[1] * 3);
-        Vec3d x2 = vs.pos(t[2]) + dx.segment<3>(t[2] * 3);
-
-        Vec3d xp = (x0 + x1 + x2) / 3;
-
-        Vec3d e01 = x1 - x0;
-        Vec3d e12 = x2 - x1;
-        Vec3d e20 = x0 - x2;
-
-        Vec3d gamma = -(e01 * vs.Gamma(t[2]).get(l) + e12 * vs.Gamma(t[0]).get(l)
-                        + e20 * vs.Gamma(t[1]).get(l));
-
-        sources.row(j) = xp;
-        charges.row(j) = gamma;
+        libigl_sources.row(source_index) = sources[source_index];
+        libigl_charges.row(source_index) = charges[source_index];
     }
 
     // Build the FMM
     Eigen::MatrixX3d result;
-    igl::fast_winding_number_biot_savart(sources,
-                                         charges,
-                                         targets,
+    igl::fast_winding_number_biot_savart(libigl_sources,
+                                         libigl_charges,
+                                         libigl_targets,
                                          Options::intValue("winding-expansion-order"),
                                          Options::doubleValue("winding-beta"),
-                                         vs.delta(),
+                                         delta,
                                          result);
 
-    VecXd vel = VecXd::Zero(vs.mesh().nv() * 3);
-    for (size_t i = 0; i < vs.mesh().nv(); i++)
+    VecXd vel = VecXd::Zero(targets.size() * 3);
+    for (size_t target_index : boost::irange(0lu, targets.size()))
     {
-        vel.segment<3>(i * 3) = result.row(i);
+        vel.segment<3>(target_index * 3) = result.row(target_index);
     }
-
-    std::cout << "FastWindingExecution " << t1.seconds() << std::endl;
 
     return vel;
 }
@@ -257,23 +180,62 @@ BiotSavart(VS3D& vs, const VecXd& dx)
     std::cout << "BoundingBoxVolume " << vs.getBoundingBoxVolume() << std::endl;
     std::cout << "NumberFaces " << vs.mesh().nt() << std::endl;
 
+
+    Clock biot_savart_duration;
+    // Init points and charges
+    std::vector<Vec3d> sources;
+    std::vector<Vec3d> targets;
+    std::vector<Vec3d> charges;
+
+    for (size_t vertex_index : boost::irange(0lu, vs.mesh().nv()))
+    {
+        targets.push_back(vs.pos(vertex_index));
+    }
+
+    for (size_t triangle_index : boost::irange(0lu, vs.mesh().nt()))
+    {
+        if (vs.surfTrack()->triangle_is_all_solid(triangle_index))
+            continue; // all-solid faces don't contribute vorticity.
+
+        sources.push_back(vs.getTranslatedTriangleCenter(triangle_index, dx));
+        charges.push_back(vs.getTranslatedTriangleSheetStrength(triangle_index, dx));
+    }
+
+    // open boundary extra face contributions
+    if (vs.m_obefv.size() == vs.m_obefe.size() && vs.m_obefv.size() == vs.m_obefc.size())
+    {
+        for (size_t open_boundary_face_index : boost::irange(0lu, vs.m_obefv.size()))
+        {
+            charges.push_back(vs.m_obefe[open_boundary_face_index]
+                              * vs.m_obefv[open_boundary_face_index]);
+            sources.push_back(vs.m_obefc[open_boundary_face_index]);
+        }
+    }
+
+    VecXd result;
+
 #ifndef WIN32
     if (Options::strValue("fast-summation") == "fmmtl")
     {
-        return BiotSavart_fmmtl(vs, dx);
+        result = BiotSavart_fmmtl(sources, targets, charges, vs.delta());
     }
     else
 #endif
       if (Options::strValue("fast-summation") == "naive")
     {
-        return BiotSavart_naive(vs, dx);
+        result = BiotSavart_naive(sources, targets, charges, vs.delta());
     }
     else if (Options::strValue("fast-summation") == "winding")
     {
-        return BiotSavart_fast_winding_number(vs, dx);
+        result = BiotSavart_fast_winding_number(sources, targets, charges, vs.delta());
+    }
+    else {
+        throw std::runtime_error("Non Implemented Fast Summation Method");
     }
 
-    throw std::runtime_error("Non Implemented Fast Summation Method");
+    std::cout << "BiotSavartExecution " << biot_savart_duration.seconds() << std::endl;
+
+    return result;
 }
 
 //#define FANGS_VERSION

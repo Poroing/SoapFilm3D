@@ -99,6 +99,11 @@ class VS3D
     LosTopos::NonDestructiveTriMesh& mesh() { return m_st->m_mesh; }
 
     Vec3d pos(size_t v) const { return vc(m_st->pm_positions[v]); }
+    /**
+     *  Returns the position of the given vertex as if the mesh concatenated vertices positions were
+     *  translated by dx.
+     */
+    Vec3d getTranslatedPosition(size_t v, const VecXd& dx) const { return pos(v) + dx.segment<3>(v * 3); }
 
     double getBoundingBoxVolume() const;
 
@@ -203,8 +208,24 @@ class VS3D
       const std::vector<size_t>& vertices_indices,
       const std::vector<Vec3d>& projected_velocity_direction) const;
     MatXd getCirculationToVelocityMatrix(const std::vector<size_t>& vertices_indices) const;
+    /**
+     *  Returns the triangle center.
+     */
     Vec3d getTriangleCenter(size_t triangle_index) const;
+    /**
+     *  Returns the triangle center as if the concatenated mesh vertices positions were translated
+     *  by dx.
+     */
+    Vec3d getTranslatedTriangleCenter(size_t triangle_index, const VecXd& dx) const;
+    /**
+     *  Returns the sheet strength at the center of the given triangle. 
+     */
     Vec3d getTriangleSheetStrength(size_t triangle_index) const;
+    /**
+     *  Returns the sheet strength at the center of the given triangle as if the concatenated mesh
+     *  vertices positions were translated by dx.
+     */
+    Vec3d getTranslatedTriangleSheetStrength(size_t triangle_index, const VecXd& dx) const;
     Vec3d getVertexOppositeEdgeInTriangle(size_t vertex_index, size_t triangle_index) const;
     bool isVertexIncidentToEdge(size_t vertex_index, size_t edge_index) const;
     /**
