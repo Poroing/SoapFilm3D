@@ -24,7 +24,7 @@ BiotSavart_naive(const std::vector<Vec3d>& sources,
 #pragma omp parallel
     {
 #pragma omp for nowait
-        for (size_t target_index : boost::irange(0lu, targets.size()))
+        for (size_t target_index = 0; target_index < targets.size(); ++target_index)
         {
             Vec3d v(0, 0, 0);
             const Vec3d& target = targets[target_index];
