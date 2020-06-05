@@ -19,7 +19,6 @@ public:
     static VS3D * sceneSphere              ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     static VS3D * sceneTet                 ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     static VS3D * sceneCube                ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
-    static VS3D * sceneSheet               ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     static VS3D * sceneBarrel              ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     static VS3D * sceneDoubleBubble        ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
     static VS3D * sceneTwoBubbles          ( Sim * sim, std::vector<LosTopos::Vec3d> & vs, std::vector<LosTopos::Vec3st> & fs, std::vector<LosTopos::Vec2i> & ls, std::vector<size_t> & cv, std::vector<Vec3d> & cx);
@@ -48,7 +47,6 @@ public:
     static void stepSphere              ( double dt, Sim * sim, VS3D * vs);
     static void stepTet                 ( double dt, Sim * sim, VS3D * vs);
     static void stepCube                ( double dt, Sim * sim, VS3D * vs);
-    static void stepSheet               ( double dt, Sim * sim, VS3D * vs);
     static void stepBarrel              ( double dt, Sim * sim, VS3D * vs);
     static void stepDoubleBubble        ( double dt, Sim * sim, VS3D * vs);
     static void stepTwoBubbles          ( double dt, Sim * sim, VS3D * vs);

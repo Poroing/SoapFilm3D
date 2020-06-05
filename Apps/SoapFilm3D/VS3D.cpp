@@ -10,15 +10,9 @@
 #include "VS3D.h"
 #include "ADT/adreal.h"
 #include "ADT/advec.h"
-#include "LinearizedImplicitEuler.h"
 #include "LosTopos/LosTopos3D/subdivisionscheme.h"
 #include "SimOptions.h"
 #include "fmmtl/fmmtl/util/Clock.hpp"
-
-#include "LinearBendingForce.h"
-#include "SimpleGravityForce.h"
-#include "SpringForce.h"
-#include "VertexAreaForce.h"
 
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseLU>
@@ -139,127 +133,17 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     if (m_constrained_positions.size() > 0)
     {
         m_constrained_velocities = constrained_velocities;
+        // If constrained velocities are not initialized default to (0, 0, 0)
         if (m_constrained_velocities.size() != m_constrained_positions.size())
         {
-
             m_constrained_velocities.resize(m_constrained_positions.size(), Vec3d(0, 0, 0));
         }
 
         m_constrained_fixed = constrained_fixed;
+        // If constrained fixed not initialized default to false
         if (m_constrained_fixed.size() != m_constrained_positions.size())
         {
             m_constrained_fixed.resize(m_constrained_positions.size(), false);
-        }
-
-        m_constrained_mass.resize(m_constrained_positions.size() * 3);
-        const size_t np = m_constrained_positions.size();
-        if (m_sim_options.looped)
-        {
-            const size_t ne = np;
-            VecXd rest_length(ne);
-            for (size_t i = 0; i < ne; ++i)
-            {
-                int iforw = (i == np - 1) ? 0 : (i + 1);
-                rest_length(i) =
-                  (m_constrained_positions[iforw] - m_constrained_positions[i]).norm();
-            }
-
-            for (size_t i = 0; i < np; ++i)
-            {
-                int ieforw = i;
-                int ieback = (i == 0) ? (ne - 1) : (i - 1);
-                double len = (rest_length(ieforw) + rest_length(ieback)) * 0.5;
-                double mass =
-                  M_PI * m_sim_options.radius * m_sim_options.radius * m_sim_options.density * len;
-                for (size_t r = 0; r < 3; ++r)
-                    m_constrained_mass[i * 3 + r] = mass;
-            }
-
-            // add spring forces
-            for (size_t i = 0; i < ne; ++i)
-            {
-                int iforw = (i == np - 1) ? 0 : (i + 1);
-                m_forces.push_back(new SpringForce(
-                  std::pair<int, int>(i, iforw), m_sim_options.stretching, rest_length(i)));
-            }
-
-            // add bending forces
-            for (size_t i = 0; i < np; ++i)
-            {
-                int iforw = (i == np - 1) ? 0 : (i + 1);
-                int iback = (i == 0) ? (np - 1) : (i - 1);
-
-                int ieforw = i;
-                int ieback = (i == 0) ? (ne - 1) : (i - 1);
-
-                m_forces.push_back(new LinearBendingForce(iback,
-                                                          i,
-                                                          iforw,
-                                                          m_sim_options.bending,
-                                                          m_sim_options.bending
-                                                            * m_sim_options.damping_coef * 0.0001,
-                                                          Vector2s::Zero(),
-                                                          rest_length(ieback),
-                                                          rest_length(ieforw)));
-            }
-        }
-        else
-        {
-            const size_t ne = np - 1;
-            VecXd rest_length(ne);
-            for (size_t i = 0; i < ne; ++i)
-            {
-                rest_length(i) =
-                  (m_constrained_positions[i + 1] - m_constrained_positions[i]).norm();
-            }
-            for (size_t i = 0; i < np; ++i)
-            {
-                double len;
-                if (i == 0)
-                {
-                    len = rest_length(0) * 0.5;
-                }
-                else if (i == np - 1)
-                {
-                    len = rest_length(ne - 1) * 0.5;
-                }
-                else
-                {
-                    int ieforw = i;
-                    int ieback = i - 1;
-                    len = (rest_length(ieforw) + rest_length(ieback)) * 0.5;
-                }
-
-                double mass =
-                  M_PI * m_sim_options.radius * m_sim_options.radius * m_sim_options.density * len;
-                for (size_t r = 0; r < 3; ++r)
-                    m_constrained_mass[i * 3 + r] = mass;
-            }
-
-            for (size_t i = 0; i < ne; ++i)
-            {
-                m_forces.push_back(new SpringForce(
-                  std::pair<int, int>(i, i + 1), m_sim_options.stretching, rest_length(i)));
-            }
-
-            for (size_t i = 1; i < np - 1; ++i)
-            {
-                int iforw = i + 1;
-                int iback = i - 1;
-
-                int ieback = i - 1;
-                int ieforw = i;
-
-                m_forces.push_back(
-                  new LinearBendingForce(iback,
-                                         i,
-                                         iforw,
-                                         m_sim_options.bending,
-                                         m_sim_options.bending * m_sim_options.damping_coef,
-                                         Vector2s::Zero(),
-                                         rest_length(ieback),
-                                         rest_length(ieforw)));
-            }
         }
     }
 
@@ -286,11 +170,6 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
 
     // Biot-Savart kernel regularization parameter
     m_delta = max_edge_len * 0.5;
-
-    m_forces.push_back(new SimpleGravityForce(Vector3s(0, 0, -m_sim_options.gravity)));
-    m_forces.push_back(new VertexAreaForce(this, m_sim_options.sigma));
-    // initialize constraint stepper
-    m_constraint_stepper = new LinearizedImplicitEuler();
 }
 
 VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
@@ -317,11 +196,6 @@ VS3D::~VS3D()
 {
     if (m_st)
         delete m_st;
-    for (Force* f : m_forces)
-        delete f;
-
-    if (m_constraint_stepper)
-        delete m_constraint_stepper;
 }
 
 std::vector<size_t>
@@ -341,19 +215,15 @@ VS3D::getNumberVerticesIncidentToRegions() const
 double
 VS3D::getBoundingBoxVolume() const
 {
-    double min_x = std::numeric_limits<double>::infinity();
-    double min_y = std::numeric_limits<double>::infinity();
-    double max_x = -min_x;
-    double max_y = -min_y;
-    for (std::size_t vertex_index = 0; vertex_index < mesh().nv(); ++vertex_index)
+    Vec3d bounding_box_min = std::numeric_limits<double>::infinity() * Vec3d::Ones();
+    Vec3d bounding_box_max = -bounding_box_min;
+    for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
     {
-        Vec3d vertex = pos(vertex_index);
-        min_x = std::min(vertex.x(), min_x);
-        min_y = std::min(vertex.y(), min_y);
-        max_x = std::max(vertex.x(), max_x);
-        max_y = std::max(vertex.y(), max_y);
+        bounding_box_max = bounding_box_max.cwiseMax(pos(vertex_index));
+        bounding_box_min = bounding_box_min.cwiseMin(pos(vertex_index));
     }
-    return (max_x - min_x) * (max_y - min_y);
+    Vec3d boundaring_box_size = bounding_box_max - bounding_box_min;
+    return boundaring_box_size.x() * boundaring_box_size.y() * boundaring_box_size.z();
 }
 
 namespace
@@ -370,12 +240,6 @@ skewSymmetric(const Vec3d& v)
     ss(2, 1) = v(0);
     return ss;
 }
-}
-
-void
-VS3D::stepConstrainted(const scalar& dt)
-{
-    m_constraint_stepper->stepScene(*this, dt);
 }
 
 double
@@ -431,59 +295,77 @@ VS3D::step(double dt)
             }
         }*/
 
-    std::vector<size_t> ob;
-    std::vector<size_t> obv;
-    constructOpenBoundaryFaces(obv, ob);
-    size_t nob = ob.size();
+    std::vector<size_t> open_boundary_edges;
+    std::vector<size_t> open_boundary_vertices;
+    constructOpenBoundaryFaces(open_boundary_vertices, open_boundary_edges);
+    std::cout << "Open Boundary Vertices: ";
+    boost::copy(open_boundary_vertices, std::ostream_iterator<size_t>(std::cout, " "));
+    std::cout << std::endl;
 
-    if (nob > 0)
+    if (!open_boundary_vertices.empty())
     {
 
-        std::vector<Vec3d> obvn(nob); // open boundary vertex normals
-        for (size_t i = 0; i < nob; i++)
+        std::vector<Vec3d> open_boundary_vertices_normal;
+        for (size_t vertex_index : open_boundary_vertices)
         {
-            Vec3d n(0, 0, 0);
-            for (size_t j = 0; j < nob; j++)
-                if (mesh().m_edges[ob[j]][0] == obv[i] || mesh().m_edges[ob[j]][1] == obv[i])
-                    n += m_obefn[j];
-            obvn[i] = n.normalized();
+            open_boundary_vertices_normal.emplace_back(0, 0, 0);
+            for (size_t face_index : boost::irange(0lu, open_boundary_edges.size()))
+            {
+                if (isVertexIncidentToEdge(vertex_index, open_boundary_edges[face_index]))
+                {
+                    open_boundary_vertices_normal.back() += m_obefn[face_index];
+                }
+            }
+            open_boundary_vertices_normal.back().normalize();
         }
 
         // solve for the obef vorticities such that the open boundary does not move
-        MatXd obA = MatXd::Zero(nob, nob);
-        for (size_t i = 0; i < nob; i++)
+        MatXd obA = MatXd::Zero(open_boundary_vertices.size(), open_boundary_vertices.size());
+        for (size_t vertex_index : boost::irange(0lu, open_boundary_vertices.size()))
         {
-            Vec3d x = pos(obv[i]);
+            Vec3d x = pos(open_boundary_vertices[vertex_index]);
+            const Vec3d& normal = open_boundary_vertices_normal[vertex_index];
 
-            for (size_t j = 0; j < nob; j++)
+            for (size_t face_index : boost::irange(0lu, open_boundary_edges.size()))
             {
-                Vec3d xp = m_obefc[j];
+                const Vec3d& xp = m_obefc[face_index];
 
                 Vec3d dx = x - xp;
                 double dxn = sqrt(dx.squaredNorm() + m_delta * m_delta);
 
-                obA(i, j) = -(skewSymmetric(dx) * m_obefe[j]).dot(obvn[i]) / (dxn * dxn * dxn);
+                obA(vertex_index, face_index) =
+                  -(skewSymmetric(dx) * m_obefe[face_index]).dot(normal) / (dxn * dxn * dxn);
             }
         }
 
         obA *= dt / (4 * M_PI);
 
-        VecXd obrhs = VecXd::Zero(nob);
-        for (size_t i = 0; i < nob; i++)
-            obrhs[i] = (m_constrained_positions[constrained_vertices_map[obv[i]]]
-                        - vc(surfTrack()->pm_newpositions[obv[i]]))
-                         .dot(obvn[i]);
+        VecXd obrhs = VecXd::Zero(open_boundary_vertices.size());
+        for (size_t vertex_index : boost::irange(0lu, open_boundary_vertices.size()))
+        {
+
+            obrhs[vertex_index] =
+              (m_constrained_positions
+                 [constrained_vertices_map[open_boundary_vertices[vertex_index]]]
+               - vc(surfTrack()->pm_newpositions[open_boundary_vertices[vertex_index]]))
+                .dot(open_boundary_vertices_normal[vertex_index]);
+        }
 
         //    VecXd obefv = obA.partialPivLu().solve(obrhs);
         double oblambda = 0.1;
-        VecXd obefv = (obA.transpose() * obA + oblambda * oblambda * MatXd::Identity(nob, nob))
-                        .partialPivLu()
-                        .solve(obA.transpose() * obrhs); // regularized solve to avoid blowing up in
-                                                         // presence of near-dependent constraints
+        VecXd open_boundar_edge_face_circulation =
+          (obA.transpose() * obA
+           + oblambda * oblambda
+               * MatXd::Identity(open_boundary_vertices.size(), open_boundary_vertices.size()))
+            .partialPivLu()
+            .solve(obA.transpose() * obrhs); // regularized solve to avoid blowing up in
+                                             // presence of near-dependent constraints
 
-        m_obefv.resize(nob, 0);
-        for (size_t i = 0; i < nob; i++)
-            m_obefv[i] = obefv[i];
+        m_obefv.resize(open_boundary_vertices.size(), 0);
+        for (size_t face_index : boost::irange(0lu, open_boundary_edges.size()))
+        {
+            m_obefv[face_index] = open_boundar_edge_face_circulation[face_index];
+        }
     }
     // following the open boundary solve, recompute the velocities
     VecXd newv = BiotSavart(*this, VecXd::Zero(mesh().nv() * 3));
@@ -492,67 +374,11 @@ VS3D::step(double dt)
 
     // project to remove motion on the constrained vertices
 
-    // assume that constrained vertices can only be manifold for now
-    // first of all, exclude from the solve those constrained vertices being surrounded by all
-    // constrained vertices (i.e. with no incident face that is not fully constrained). These
-    // vertices don't contribute vorticity because
-    //  their incident faces don't contribute vorticity, and they don't desire displacement
-    //  correction because they just passively move to wherever they are prescribed to go. So they
-    //  don't appear in either columns or rows in the solve.
-    std::vector<int> constrained_vertex_nonconstrained_neighbors(
-      m_constrained_vertices.size(),
-      0); // how many non-fully-constrained incident faces each constrained vertex has
-    for (size_t i = 0; i < m_constrained_vertices.size(); i++)
-        for (size_t j = 0; j < mesh().m_vertex_to_triangle_map[m_constrained_vertices[i]].size();
-             j++)
-        {
-            LosTopos::Vec3st t =
-              mesh().get_triangle(mesh().m_vertex_to_triangle_map[m_constrained_vertices[i]][j]);
-            if (!(m_st->vertex_is_any_solid(t[0]) && m_st->vertex_is_any_solid(t[1])
-                  && m_st->vertex_is_any_solid(t[2])))
-                constrained_vertex_nonconstrained_neighbors[i]++;
-        }
-
-    std::vector<size_t>
-      relevant_constrained_vertices; // constrained vertices that are not fully constrained
-                                     // (circulations on those vertices don't matter) and are not on
-                                     // open boundary (the constraint solve there is different and
-                                     // they have already been handled by the OB solve above)
-    for (size_t i = 0; i < m_constrained_vertices.size(); i++)
-    {
-        if (constrained_vertex_nonconstrained_neighbors[i] == 0)
-            continue; // ignore constrained vertices who don't have any non-fully-constrianed
-                      // incident faces
-
-        std::set<Vec2i, Vec2iComp> rps;
-        for (size_t j = 0; j < mesh().m_vertex_to_triangle_map[m_constrained_vertices[i]].size();
-             j++)
-        {
-            LosTopos::Vec3st t =
-              mesh().get_triangle(mesh().m_vertex_to_triangle_map[m_constrained_vertices[i]][j]);
-            if (m_st->vertex_is_any_solid(t[0]) && m_st->vertex_is_any_solid(t[1])
-                && m_st->vertex_is_any_solid(t[2]))
-                continue;
-            LosTopos::Vec2i l = mesh().get_triangle_label(
-              mesh().m_vertex_to_triangle_map[m_constrained_vertices[i]][j]);
-            Vec2i rp = (l[0] < l[1] ? Vec2i(l[0], l[1]) : Vec2i(l[1], l[0]));
-            rps.insert(rp);
-        }
-        if (rps.size() > 1)
-            continue; // ignore constrained vertices who are incident to more than one region pair
-                      // (through non-fully-constrained incident faces), because the code below
-                      // can't handle them
-
-        bool ob = false;
-        for (size_t j = 0; j < nob; j++)
-            if (obv[j] == m_constrained_vertices[i])
-                ob = true;
-        if (ob)
-            continue; // ignore open boundary vertices
-
-        relevant_constrained_vertices.push_back(i);
-    }
-
+    std::vector<size_t> relevant_constrained_vertices =
+      getRelevantContrainedVertices(open_boundary_vertices);
+    std::cout << "Relevant Contrained Vertices: ";
+    boost::copy(relevant_constrained_vertices, std::ostream_iterator<size_t>(std::cout, " "));
+    std::cout << std::endl;
     size_t nc = relevant_constrained_vertices.size();
 
 #warning There should be a way to factorize this with the BiotSavart function.
@@ -691,6 +517,65 @@ VS3D::constructOpenBoundaryFaces(std::vector<size_t>& open_boundary_vertices,
     open_boundary_vertices.assign(obv_set.begin(), obv_set.end());
     assert(open_boundary_vertices.size()
            == open_boundary_edges.size()); // assume the open boundary has simple topology
+}
+
+std::vector<size_t>
+VS3D::getRelevantContrainedVertices(const std::vector<size_t>& open_boundary_vertices) const
+{
+    // assume that constrained vertices can only be manifold for now
+    // first of all, exclude from the solve those constrained vertices being surrounded by all
+    // constrained vertices (i.e. with no incident face that is not fully constrained). These
+    // vertices don't contribute vorticity because
+    //  their incident faces don't contribute vorticity, and they don't desire displacement
+    //  correction because they just passively move to wherever they are prescribed to go. So they
+    //  don't appear in either columns or rows in the solve.
+    std::vector<int> constrained_vertex_nonconstrained_neighbors(
+      m_constrained_vertices.size(),
+      0); // how many non-fully-constrained incident faces each constrained vertex has
+    for (size_t i = 0; i < m_constrained_vertices.size(); i++)
+        for (size_t triangle_index : mesh().m_vertex_to_triangle_map[m_constrained_vertices[i]])
+        {
+            if (!m_st->triangle_is_all_solid(triangle_index))
+            {
+                constrained_vertex_nonconstrained_neighbors[i]++;
+            }
+        }
+
+    std::vector<size_t> relevant_constrained_vertices;
+
+    for (size_t i = 0; i < m_constrained_vertices.size(); i++)
+    {
+        if (constrained_vertex_nonconstrained_neighbors[i] == 0)
+            continue; // ignore constrained vertices who don't have any non-fully-constrianed
+                      // incident faces
+
+        std::set<Vec2i, Vec2iComp> rps;
+        for (size_t triangle_index : mesh().m_vertex_to_triangle_map[m_constrained_vertices[i]])
+        {
+            if (m_st->triangle_is_all_solid(triangle_index))
+                continue;
+            LosTopos::Vec2i l = mesh().get_triangle_label(triangle_index);
+            Vec2i rp = (l[0] < l[1] ? Vec2i(l[0], l[1]) : Vec2i(l[1], l[0]));
+            rps.insert(rp);
+        }
+
+        if (rps.size() > 1)
+        {
+            continue; // ignore constrained vertices who are incident to more than one region pair
+                      // (through non-fully-constrained incident faces), because the code below
+                      // can't handle them
+        }
+
+        if (boost::find(open_boundary_vertices, m_constrained_vertices[i])
+            != open_boundary_vertices.end())
+        {
+            continue; // ignore open boundary vertices
+        }
+
+        relevant_constrained_vertices.push_back(i);
+    }
+
+    return relevant_constrained_vertices;
 }
 
 void
@@ -1371,10 +1256,26 @@ VS3D::getTriangleCenter(size_t triangle_index) const
 }
 
 Vec3d
+VS3D::getTranslatedTriangleCenter(size_t triangle_index, const VecXd& dx) const
+{
+    LosTopos::Vec3st t = mesh().get_triangle(triangle_index);
+    return (getTranslatedPosition(t[0], dx) + getTranslatedPosition(t[1], dx)
+            + getTranslatedPosition(t[2], dx))
+           / 3;
+}
+
+Vec3d
 VS3D::getVertexOppositeEdgeInTriangle(size_t vertex_index, size_t triangle_index) const
 {
     LosTopos::Vec3st triangle = mesh().get_triangle(triangle_index);
     return pos(triangle[(vertex_index + 2) % 3]) - pos(triangle[(vertex_index + 1) % 3]);
+}
+
+bool
+VS3D::isVertexIncidentToEdge(size_t vertex_index, size_t edge_index) const
+{
+    return mesh().m_edges[edge_index][0] == vertex_index
+           || mesh().m_edges[edge_index][1] == vertex_index;
 }
 
 std::vector<Vec3d>
@@ -1480,6 +1381,20 @@ VS3D::getTriangleSheetStrength(size_t triangle_index) const
     Vec3d e01 = pos(triangle[1]) - pos(triangle[0]);
     Vec3d e12 = pos(triangle[2]) - pos(triangle[1]);
     Vec3d e20 = pos(triangle[0]) - pos(triangle[2]);
+
+    return -(e01 * (*m_Gamma)[triangle[2]].get(incident_regions)
+             + e12 * (*m_Gamma)[triangle[0]].get(incident_regions)
+             + e20 * (*m_Gamma)[triangle[1]].get(incident_regions));
+}
+
+Vec3d
+VS3D::getTranslatedTriangleSheetStrength(size_t triangle_index, const VecXd& dx) const
+{
+    LosTopos::Vec3st triangle = mesh().get_triangle(triangle_index);
+    LosTopos::Vec2i incident_regions = mesh().get_triangle_label(triangle_index);
+    Vec3d e01 = getTranslatedPosition(triangle[1], dx) - getTranslatedPosition(triangle[0], dx);
+    Vec3d e12 = getTranslatedPosition(triangle[2], dx) - getTranslatedPosition(triangle[1], dx);
+    Vec3d e20 = getTranslatedPosition(triangle[0], dx) - getTranslatedPosition(triangle[2], dx);
 
     return -(e01 * (*m_Gamma)[triangle[2]].get(incident_regions)
              + e12 * (*m_Gamma)[triangle[0]].get(incident_regions)
@@ -2133,19 +2048,22 @@ VS3D::post_t1(const LosTopos::SurfTrack& st, size_t v, size_t a, size_t b, void*
     for (size_t vother_index = 0; vother_index < td->neighbor_verts.size(); ++vother_index)
     {
         size_t previously_adjacent_vertex = td->neighbor_verts[vother_index];
-        const std::vector<Vec2i>& previously_incident_region_pairs = td->neighbor_region_pairs[vother_index];
-        std::vector<Vec2i> currently_incident_region_pairs = getVertexIncidentRegionPairs(previously_adjacent_vertex);
+        const std::vector<Vec2i>& previously_incident_region_pairs =
+          td->neighbor_region_pairs[vother_index];
+        std::vector<Vec2i> currently_incident_region_pairs =
+          getVertexIncidentRegionPairs(previously_adjacent_vertex);
 
         for (const Vec2i& region_pair : currently_incident_region_pairs)
         {
-            if (boost::find(previously_incident_region_pairs, region_pair) == previously_incident_region_pairs.end() )
+            if (boost::find(previously_incident_region_pairs, region_pair)
+                == previously_incident_region_pairs.end())
                 Gamma(previously_adjacent_vertex).set(region_pair, Gamma(v).get(region_pair));
-
         }
 
         if (Options::boolValue("print-t1-info"))
         {
-            std::cout << "Gammas: " << std::endl << Gamma(previously_adjacent_vertex).values << std::endl;
+            std::cout << "Gammas: " << std::endl
+                      << Gamma(previously_adjacent_vertex).values << std::endl;
         }
     }
 }
@@ -2187,8 +2105,8 @@ struct SnapTempData
     Vec3d old_x0;
     Vec3d old_x1;
 
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> v0_incident_region_pairs;
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> v1_incident_region_pairs;
+    std::vector<Vec2i> v0_incident_region_pairs;
+    std::vector<Vec2i> v1_incident_region_pairs;
 };
 
 void
@@ -2201,20 +2119,8 @@ VS3D::pre_snap(const LosTopos::SurfTrack& st, size_t v0, size_t v1, void** data)
     td->old_x0 = vc(st.pm_positions[v0]);
     td->old_x1 = vc(st.pm_positions[v1]);
 
-    td->v0_incident_region_pairs.setZero(m_nregion, m_nregion);
-    for (size_t i = 0; i < st.m_mesh.m_vertex_to_triangle_map[td->v0].size(); i++)
-    {
-        LosTopos::Vec2i l =
-          st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[td->v0][i]);
-        td->v0_incident_region_pairs(l[0], l[1]) = td->v0_incident_region_pairs(l[1], l[0]) = true;
-    }
-    td->v1_incident_region_pairs.setZero(m_nregion, m_nregion);
-    for (size_t i = 0; i < st.m_mesh.m_vertex_to_triangle_map[td->v1].size(); i++)
-    {
-        LosTopos::Vec2i l =
-          st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[td->v1][i]);
-        td->v1_incident_region_pairs(l[0], l[1]) = td->v1_incident_region_pairs(l[1], l[0]) = true;
-    }
+    td->v0_incident_region_pairs = getVertexIncidentRegionPairs(v0);
+    td->v1_incident_region_pairs = getVertexIncidentRegionPairs(v1);
 
     *data = (void*)td;
     std::cout << "pre snap: " << v0 << " " << v1 << std::endl;
@@ -2234,24 +2140,18 @@ VS3D::post_snap(const LosTopos::SurfTrack& st, size_t v_kept, size_t v_deleted, 
     double s = (merged_x - td->old_x0).dot(td->old_x1 - td->old_x0)
                / (td->old_x1 - td->old_x0).squaredNorm();
 
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> merged_vertex_incident_region_pairs;
-    merged_vertex_incident_region_pairs.setZero(m_nregion, m_nregion);
-    for (size_t i = 0; i < st.m_mesh.m_vertex_to_triangle_map[v_kept].size(); i++)
-    {
-        LosTopos::Vec2i l =
-          st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[v_kept][i]);
-        std::cout << "triangle " << st.m_mesh.m_vertex_to_triangle_map[v_kept][i]
-                  << " label = " << l << std::endl;
-        merged_vertex_incident_region_pairs(l[0], l[1]) =
-          merged_vertex_incident_region_pairs(l[1], l[0]) = true;
-    }
+    std::vector<Vec2i> merged_vertex_incident_region_pairs = getVertexIncidentRegionPairs(v_kept);
 
-    std::cout << "v0 incident region pairs: " << std::endl
-              << td->v0_incident_region_pairs << std::endl;
-    std::cout << "v1 incident region pairs: " << std::endl
-              << td->v1_incident_region_pairs << std::endl;
-    std::cout << "merged vertex incident region pairs: " << std::endl
-              << merged_vertex_incident_region_pairs << std::endl;
+    if (Options::boolValue("print-snap-info"))
+    {
+        std::cout << "v0 incident region pairs: " << std::endl;
+        boost::copy(td->v0_incident_region_pairs, std::ostream_iterator<Vec2i>(std::cout, "\n\n"));
+        std::cout << "v1 incident region pairs: " << std::endl;
+        boost::copy(td->v1_incident_region_pairs, std::ostream_iterator<Vec2i>(std::cout, "\n\n"));
+        std::cout << "merged vertex incident region pairs: " << std::endl;
+        boost::copy(merged_vertex_incident_region_pairs,
+                    std::ostream_iterator<Vec2i>(std::cout, "\n\n"));
+    }
 
     // for region pairs not existing in original v0 and v1, we cannot simply assume 0 circulation
     // because the neighbors that do have those region pairs
@@ -2259,168 +2159,59 @@ VS3D::post_snap(const LosTopos::SurfTrack& st, size_t v_kept, size_t v_deleted, 
     //  spikes. The information that should be filled in here can only come from neighbors.
     GammaType newGamma(m_nregion);
     newGamma.setZero();
-    for (int i = 0; i < m_nregion; i++)
+    for (const Vec2i& region_pair : merged_vertex_incident_region_pairs)
     {
-        for (int j = i + 1; j < m_nregion; j++)
+        bool is_v0_incident = boost::find(td->v0_incident_region_pairs, region_pair)
+                              != td->v0_incident_region_pairs.end();
+        bool is_v1_incident = boost::find(td->v1_incident_region_pairs, region_pair)
+                              != td->v1_incident_region_pairs.end();
+
+        if (!is_v0_incident && !is_v1_incident)
         {
-            if (merged_vertex_incident_region_pairs(i, j))
+            double neighborhood_mean = 0;
+            int neighborhood_counter = 0;
+            for (size_t vertex_index : getVertexAdjacentVertices(v_kept))
             {
-                if (!td->v0_incident_region_pairs(i, j) && !td->v1_incident_region_pairs(i, j))
+                std::vector<Vec2i> vertex_incident_region_pairs =
+                  getVertexIncidentRegionPairs(vertex_index);
+                if (boost::find(vertex_incident_region_pairs, region_pair)
+                    == vertex_incident_region_pairs.end())
                 {
-                    std::cout << "region pair " << i << " " << j
-                              << " is being computed from 1-ring neighbors" << std::endl;
-                    double neighborhood_mean = 0;
-                    int neighborhood_counter = 0;
-                    for (size_t k = 0; k < st.m_mesh.m_vertex_to_edge_map[v_kept].size(); k++)
-                    {
-                        LosTopos::Vec2st e =
-                          st.m_mesh.m_edges[st.m_mesh.m_vertex_to_edge_map[v_kept][k]];
-                        size_t vother = (e[0] == v_kept ? e[1] : e[0]);
-
-                        bool incident_to_this_region_pair = false;
-                        for (size_t l = 0; l < st.m_mesh.m_vertex_to_triangle_map[vother].size();
-                             l++)
-                        {
-                            LosTopos::Vec2i ll = st.m_mesh.get_triangle_label(
-                              st.m_mesh.m_vertex_to_triangle_map[vother][l]);
-                            if ((ll[0] == i && ll[1] == j) || (ll[0] == j && ll[1] == i))
-                            {
-                                incident_to_this_region_pair = true;
-                                break;
-                            }
-                        }
-
-                        std::cout << "vother = " << vother
-                                  << " incident = " << incident_to_this_region_pair << std::endl;
-
-                        if (incident_to_this_region_pair)
-                        {
-                            neighborhood_mean += (*m_Gamma)[vother].get(i, j);
-                            neighborhood_counter++;
-                        }
-                    }
-                    if (neighborhood_counter != 0)
-                        neighborhood_mean /= neighborhood_counter;
-
-                    newGamma.set(i, j, neighborhood_mean);
+                    continue;
                 }
-                else if (!td->v0_incident_region_pairs(i, j))
-                {
-                    newGamma.set(i, j, (*m_Gamma)[td->v1].get(i, j));
-                }
-                else if (!td->v1_incident_region_pairs(i, j))
-                {
-                    newGamma.set(i, j, (*m_Gamma)[td->v0].get(i, j));
-                }
-                else
-                {
-                    newGamma.set(i,
-                                 j,
-                                 (*m_Gamma)[td->v0].get(i, j) * (1 - s)
-                                   + (*m_Gamma)[td->v1].get(i, j) * s);
-                }
+
+                neighborhood_mean += Gamma(vertex_index).get(region_pair);
+                neighborhood_counter++;
             }
+
+            if (neighborhood_counter != 0)
+                neighborhood_mean /= neighborhood_counter;
+
+            newGamma.set(region_pair, neighborhood_mean);
+        }
+        else if (is_v1_incident && !is_v0_incident)
+        {
+            newGamma.set(region_pair, Gamma(td->v1).get(region_pair));
+        }
+        else if (is_v0_incident && !is_v1_incident)
+        {
+            newGamma.set(region_pair, Gamma(td->v0).get(region_pair));
+        }
+        else
+        {
+            newGamma.set(region_pair,
+                         Gamma(td->v0).get(region_pair) * (1 - s)
+                           + Gamma(td->v1).get(region_pair) * s);
         }
     }
-    std::cout << "v0 Gamma = " << std::endl << (*m_Gamma)[td->v0].values << std::endl;
-    std::cout << "v1 Gamma = " << std::endl << (*m_Gamma)[td->v1].values << std::endl;
-    std::cout << "new Gamma = " << std::endl << newGamma.values << std::endl;
-    (*m_Gamma)[v_kept] = newGamma;
-}
 
-void
-VS3D::accumulateGradU(VectorXs& F, const VectorXs& dx, const VectorXs& dv)
-{
-    const int ndof = m_constrained_positions.size() * 3;
-
-    // Accumulate all energy gradients
-    if (dx.size() == 0)
+    if (Options::boolValue("print-snap-info"))
     {
-        for (std::vector<Force*>::size_type i = 0; i < m_forces.size(); ++i)
-            m_forces[i]->addGradEToTotal(
-              Eigen::Map<VectorXs>((double*)&m_constrained_positions[0], ndof),
-              Eigen::Map<VectorXs>((double*)&m_constrained_velocities[0], ndof),
-              Eigen::Map<VectorXs>((double*)&m_constrained_mass[0], ndof),
-              F);
+        std::cout << "v0 Gamma = " << std::endl << Gamma(td->v0).values << std::endl;
+        std::cout << "v1 Gamma = " << std::endl << Gamma(td->v1).values << std::endl;
+        std::cout << "new Gamma = " << std::endl << newGamma.values << std::endl;
     }
-    else
-    {
-        VectorXs nx = Eigen::Map<VectorXs>((double*)&m_constrained_positions[0], ndof) + dx;
-        VectorXs nv = Eigen::Map<VectorXs>((double*)&m_constrained_velocities[0], ndof) + dv;
-        for (std::vector<Force*>::size_type i = 0; i < m_forces.size(); ++i)
-            m_forces[i]->addGradEToTotal(
-              nx, nv, Eigen::Map<VectorXs>((double*)&m_constrained_mass[0], ndof), F);
-    }
-}
-
-void
-VS3D::accumulateddUdxdx(TripletXs& A, const VectorXs& dx, const VectorXs& dv)
-{
-    const int ndof = m_constrained_positions.size() * 3;
-    if (dx.size() == 0)
-    {
-        for (std::vector<Force*>::size_type i = 0; i < m_forces.size(); ++i)
-            m_forces[i]->addHessXToTotal(
-              Eigen::Map<VectorXs>((double*)&m_constrained_positions[0], ndof),
-              Eigen::Map<VectorXs>((double*)&m_constrained_velocities[0], ndof),
-              Eigen::Map<VectorXs>((double*)&m_constrained_mass[0], ndof),
-              A);
-    }
-    else
-    {
-        VectorXs nx = Eigen::Map<VectorXs>((double*)&m_constrained_positions[0], ndof) + dx;
-        VectorXs nv = Eigen::Map<VectorXs>((double*)&m_constrained_velocities[0], ndof) + dv;
-        for (std::vector<Force*>::size_type i = 0; i < m_forces.size(); ++i)
-            m_forces[i]->addHessXToTotal(
-              nx, nv, Eigen::Map<VectorXs>((double*)&m_constrained_mass[0], ndof), A);
-    }
-}
-
-// Kind of a misnomer.
-void
-VS3D::accumulateddUdxdv(TripletXs& A, const VectorXs& dx, const VectorXs& dv)
-{
-    const int ndof = m_constrained_positions.size() * 3;
-    if (dx.size() == 0)
-    {
-        for (std::vector<Force*>::size_type i = 0; i < m_forces.size(); ++i)
-            m_forces[i]->addHessVToTotal(
-              Eigen::Map<VectorXs>((double*)&m_constrained_positions[0], ndof),
-              Eigen::Map<VectorXs>((double*)&m_constrained_velocities[0], ndof),
-              Eigen::Map<VectorXs>((double*)&m_constrained_mass[0], ndof),
-              A);
-    }
-    else
-    {
-        VectorXs nx = Eigen::Map<VectorXs>((double*)&m_constrained_positions[0], ndof) + dx;
-        VectorXs nv = Eigen::Map<VectorXs>((double*)&m_constrained_velocities[0], ndof) + dv;
-        for (std::vector<Force*>::size_type i = 0; i < m_forces.size(); ++i)
-            m_forces[i]->addHessVToTotal(
-              nx, nv, Eigen::Map<VectorXs>((double*)&m_constrained_mass[0], ndof), A);
-    }
-}
-
-void
-VS3D::preCompute(const VectorXs& dx, const VectorXs& dv, const scalar& dt)
-{
-    const int ndof = m_constrained_positions.size() * 3;
-    if (dx.size() == 0)
-    {
-        for (std::vector<Force*>::size_type i = 0; i < m_forces.size(); ++i)
-            m_forces[i]->preCompute(
-              Eigen::Map<VectorXs>((double*)&m_constrained_positions[0], ndof),
-              Eigen::Map<VectorXs>((double*)&m_constrained_velocities[0], ndof),
-              Eigen::Map<VectorXs>((double*)&m_constrained_mass[0], ndof),
-              dt);
-    }
-    else
-    {
-        VectorXs nx = Eigen::Map<VectorXs>((double*)&m_constrained_positions[0], ndof) + dx;
-        VectorXs nv = Eigen::Map<VectorXs>((double*)&m_constrained_velocities[0], ndof) + dv;
-        for (std::vector<Force*>::size_type i = 0; i < m_forces.size(); ++i)
-            m_forces[i]->preCompute(
-              nx, nv, Eigen::Map<VectorXs>((double*)&m_constrained_mass[0], ndof), dt);
-    }
+    Gamma(v_kept) = newGamma;
 }
 
 void

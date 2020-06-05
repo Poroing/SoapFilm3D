@@ -81,6 +81,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addStringOption("smoothing-type", "laplacian");
 
     Options::addBooleanOption("print-t1-info", false);
+    Options::addBooleanOption("print-snap-info", false);
 
     Options::addStringOption("output-dir", "_");
     Options::addBooleanOption("output-png", true);
@@ -190,9 +191,6 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
               this, vertices, faces, face_labels, constrained_vertices, constrained_positions);
         else if (m_scene == "cube")
             m_vs = Scenes::sceneCube(
-              this, vertices, faces, face_labels, constrained_vertices, constrained_positions);
-        else if (m_scene == "sheet")
-            m_vs = Scenes::sceneSheet(
               this, vertices, faces, face_labels, constrained_vertices, constrained_positions);
         else if (m_scene == "barrel")
             m_vs = Scenes::sceneBarrel(
@@ -307,8 +305,6 @@ Sim::step()
         Scenes::stepTet(m_dt, this, m_vs);
     else if (m_scene == "cube")
         Scenes::stepCube(m_dt, this, m_vs);
-    else if (m_scene == "sheet")
-        Scenes::stepSheet(m_dt, this, m_vs);
     else if (m_scene == "barrel")
         Scenes::stepBarrel(m_dt, this, m_vs);
     else if (m_scene == "doublebubble")
