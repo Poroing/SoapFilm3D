@@ -40,5 +40,13 @@ include_directories(${LIBIGL_INCLUDE_DIR})
 
 include_directories (${EIGEN_INCLUDE_DIR})
 
-add_executable (SoapFilm3D ${Headers} ${Sources})
+set(SoapFilm3D_SOURCES ${Sources})
+set(Tests_SOURCES ${Sources})
+list(FILTER Tests_SOURCES EXCLUDE REGEX .*main.cpp)
+list(FILTER SoapFilm3D_SOURCES EXCLUDE REGEX .*tests.cpp)
+
+add_executable (SoapFilm3D ${Headers} ${SoapFilm3D_SOURCES})
 target_link_libraries (SoapFilm3D LosTopos ${DEFAULT_LIBRARIES})
+
+add_executable (Tests ${Headers} ${Tests_SOURCES})
+target_link_libraries (Tests LosTopos ${DEFAULT_LIBRARIES})

@@ -194,10 +194,8 @@ igl::fast_winding_number_biot_savart(const Eigen::MatrixBase<DerivedP>& P,
         zeroth_expansion << 0, 0, 0;
         real_p areatotal = 0.0;
 
-        for (int j = 0; j < point_indices[index].size(); j++)
+        for (size_t curr_point_index : point_indices[index])
         {
-            int curr_point_index = point_indices[index][j];
-
             masscenter += P.row(curr_point_index);
             zeroth_expansion += G.row(curr_point_index);
             areatotal += 1.;
@@ -210,10 +208,9 @@ igl::fast_winding_number_biot_savart(const Eigen::MatrixBase<DerivedP>& P,
         real_r max_norm = 0;
         real_r curr_norm;
 
-        for (int i = 0; i < point_indices[index].size(); i++)
+        for (size_t curr_point_index : point_indices[index])
         {
             // Get max distance from center of mass:
-            int curr_point_index = point_indices[index][i];
             Eigen::Matrix<real_r, 1, 3> point = P.row(curr_point_index) - masscenter;
             curr_norm = point.norm();
             if (curr_norm > max_norm)

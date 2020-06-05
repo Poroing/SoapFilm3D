@@ -374,8 +374,8 @@ VS3D::step(double dt)
 
     // project to remove motion on the constrained vertices
 
-
-    std::vector<size_t> relevant_constrained_vertices = getRelevantContrainedVertices(open_boundary_vertices);
+    std::vector<size_t> relevant_constrained_vertices =
+      getRelevantContrainedVertices(open_boundary_vertices);
     std::cout << "Relevant Contrained Vertices: ";
     boost::copy(relevant_constrained_vertices, std::ostream_iterator<size_t>(std::cout, " "));
     std::cout << std::endl;
@@ -519,7 +519,8 @@ VS3D::constructOpenBoundaryFaces(std::vector<size_t>& open_boundary_vertices,
            == open_boundary_edges.size()); // assume the open boundary has simple topology
 }
 
-std::vector<size_t> VS3D::getRelevantContrainedVertices(const std::vector<size_t>& open_boundary_vertices) const
+std::vector<size_t>
+VS3D::getRelevantContrainedVertices(const std::vector<size_t>& open_boundary_vertices) const
 {
     // assume that constrained vertices can only be manifold for now
     // first of all, exclude from the solve those constrained vertices being surrounded by all
@@ -540,8 +541,7 @@ std::vector<size_t> VS3D::getRelevantContrainedVertices(const std::vector<size_t
             }
         }
 
-    std::vector<size_t>
-      relevant_constrained_vertices;
+    std::vector<size_t> relevant_constrained_vertices;
 
     for (size_t i = 0; i < m_constrained_vertices.size(); i++)
     {
@@ -566,7 +566,8 @@ std::vector<size_t> VS3D::getRelevantContrainedVertices(const std::vector<size_t
                       // can't handle them
         }
 
-        if (boost::find(open_boundary_vertices, m_constrained_vertices[i]) != open_boundary_vertices.end())
+        if (boost::find(open_boundary_vertices, m_constrained_vertices[i])
+            != open_boundary_vertices.end())
         {
             continue; // ignore open boundary vertices
         }
@@ -575,7 +576,6 @@ std::vector<size_t> VS3D::getRelevantContrainedVertices(const std::vector<size_t
     }
 
     return relevant_constrained_vertices;
-    
 }
 
 void
@@ -1259,7 +1259,9 @@ Vec3d
 VS3D::getTranslatedTriangleCenter(size_t triangle_index, const VecXd& dx) const
 {
     LosTopos::Vec3st t = mesh().get_triangle(triangle_index);
-    return (getTranslatedPosition(t[0], dx) + getTranslatedPosition(t[1], dx) + getTranslatedPosition(t[2], dx)) / 3;
+    return (getTranslatedPosition(t[0], dx) + getTranslatedPosition(t[1], dx)
+            + getTranslatedPosition(t[2], dx))
+           / 3;
 }
 
 Vec3d

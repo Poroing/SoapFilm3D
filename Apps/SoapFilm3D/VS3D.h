@@ -32,8 +32,6 @@ class VS3D
     friend class Sim;
     friend class Scenes;
     friend VecXd BiotSavart(VS3D& vs, const VecXd& dx);
-    friend VecXd BiotSavart_naive(VS3D& vs, const VecXd& dx);
-    friend VecXd BiotSavart_fmmtl(VS3D& vs, const VecXd& dx);
 
   public:
     VS3D(const std::vector<LosTopos::Vec3d>& vs,
