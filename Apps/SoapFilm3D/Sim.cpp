@@ -81,6 +81,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addStringOption("smoothing-type", "laplacian");
 
     Options::addBooleanOption("print-t1-info", false);
+    Options::addBooleanOption("print-snap-info", false);
 
     Options::addStringOption("output-dir", "_");
     Options::addBooleanOption("output-png", true);
