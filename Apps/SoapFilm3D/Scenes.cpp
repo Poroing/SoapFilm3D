@@ -546,88 +546,6 @@ Scenes::sceneCube(Sim* sim,
 }
 
 VS3D*
-Scenes::sceneSheet(Sim* sim,
-                   std::vector<LosTopos::Vec3d>& vs,
-                   std::vector<LosTopos::Vec3st>& fs,
-                   std::vector<LosTopos::Vec2i>& ls,
-                   std::vector<size_t>& cv,
-                   std::vector<Vec3d>& cx)
-{
-    int N = Options::intValue("mesh-size-n");
-
-    std::vector<Vec3d> v;
-    std::vector<Vec3i> f;
-    std::vector<Vec2i> l;
-
-    // square sheet
-    //    v.push_back(Vec3d(-1,  0, -1));
-    //    v.push_back(Vec3d( 1,  0, -1));
-    //    v.push_back(Vec3d(-1,  0,  1));
-    //    v.push_back(Vec3d( 1,  0,  1));
-    //
-    //    f.push_back(Vec3i(0, 1, 3));    l.push_back(Vec2i(0, 1));
-    //    f.push_back(Vec3i(3, 2, 0));    l.push_back(Vec2i(0, 1));
-
-    // hexagonal sheet
-    double h = std::sqrt(3.0) / 2;
-    v.push_back(Vec3d(0, 0.2, 0));
-    v.push_back(Vec3d(-1, 0.2, 0));
-    v.push_back(Vec3d(-0.5, 0.2, -h));
-    v.push_back(Vec3d(0.5, 0.2, -h));
-    v.push_back(Vec3d(1, 0.2, 0));
-    v.push_back(Vec3d(0.5, 0.2, h));
-    v.push_back(Vec3d(-0.5, 0.2, h));
-
-    f.push_back(Vec3i(0, 1, 2));
-    l.push_back(Vec2i(1, 0));
-    f.push_back(Vec3i(0, 2, 3));
-    l.push_back(Vec2i(1, 0));
-    f.push_back(Vec3i(0, 3, 4));
-    l.push_back(Vec2i(1, 0));
-    f.push_back(Vec3i(0, 4, 5));
-    l.push_back(Vec2i(1, 0));
-    f.push_back(Vec3i(0, 5, 6));
-    l.push_back(Vec2i(1, 0));
-    f.push_back(Vec3i(0, 6, 1));
-    l.push_back(Vec2i(1, 0));
-
-    for (int i = 0; i < N; i++)
-        subdivide(Vec3d(0, 0, 0), 0, v, f, l);
-
-    int buf[] = { 1, 26, 13, 29, 2, 30, 15, 32, 3, 33, 16, 35,
-                  4, 36, 17, 38, 5, 39, 18, 42, 6, 41, 14, 27 };
-    int nbuf = sizeof(buf) / sizeof(int);
-
-    std::vector<Vec3d> vel;
-    std::vector<unsigned char> fixed;
-    for (int i = 0; i < nbuf; ++i)
-    {
-        fixed.push_back(buf[i] == 18);
-        vel.push_back(Vec3d::Zero());
-        cv.push_back(buf[i]);
-        v[buf[i]] += Vec3d(0, -0.6 * v[buf[i]](2) * v[buf[i]](2), 0);
-        cx.push_back(v[buf[i]]);
-    }
-
-    double displacement = 0.1;
-    for (size_t i = 0; i < v.size(); i++)
-        if ((v[i] - Vec3d(0, 0, 0)).norm() < 1e-6)
-            v[i].y() += displacement;
-
-    vs.resize(v.size());
-    fs.resize(f.size());
-    ls.resize(l.size());
-    for (size_t i = 0; i < v.size(); i++)
-        vs[i] = LosTopos::Vec3d(v[i][0], v[i][1], v[i][2]);
-    for (size_t i = 0; i < f.size(); i++)
-        fs[i] = LosTopos::Vec3st(f[i][0], f[i][1], f[i][2]);
-    for (size_t i = 0; i < l.size(); i++)
-        ls[i] = LosTopos::Vec2i(l[i][0], l[i][1]);
-
-    return new VS3D(vs, fs, ls, cv, cx, vel, fixed);
-}
-
-VS3D*
 Scenes::sceneBarrel(Sim* sim,
                     std::vector<LosTopos::Vec3d>& vs,
                     std::vector<LosTopos::Vec3st>& fs,
@@ -2569,12 +2487,6 @@ Scenes::stepTet(double dt, Sim* sim, VS3D* vs)
 void
 Scenes::stepCube(double dt, Sim* sim, VS3D* vs)
 {
-}
-
-void
-Scenes::stepSheet(double dt, Sim* sim, VS3D* vs)
-{
-    vs->stepConstrainted(dt);
 }
 
 void

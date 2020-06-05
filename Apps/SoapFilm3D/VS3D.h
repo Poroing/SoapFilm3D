@@ -9,7 +9,6 @@
 #ifndef __MultiTracker__VS3D__
 #define __MultiTracker__VS3D__
 
-#include "Force.h"
 #include "MathDefs.h"
 #include "SceneStepper.h"
 #include "eigenheaders.h"
@@ -91,6 +90,8 @@ class VS3D
 
     SimOptions& simOptions() { return m_sim_options; }
 
+    void initializeForces();
+
   public:
     const LosTopos::SurfTrack* surfTrack() const { return m_st; }
     LosTopos::SurfTrack* surfTrack() { return m_st; }
@@ -154,22 +155,14 @@ class VS3D
     const std::vector<unsigned char>& constrainedFixed() const { return m_constrained_fixed; }
     std::vector<unsigned char>& constrainedFixed() { return m_constrained_fixed; }
 
-    void accumulateGradU(VectorXs& F,
-                         const VectorXs& dx = VectorXs(),
-                         const VectorXs& dv = VectorXs());
-
-    void accumulateddUdxdx(TripletXs& A,
-                           const VectorXs& dx = VectorXs(),
-                           const VectorXs& dv = VectorXs());
-
-    // Kind of a misnomer.
-    void accumulateddUdxdv(TripletXs& A,
-                           const VectorXs& dx = VectorXs(),
-                           const VectorXs& dv = VectorXs());
-
-    void preCompute(const VectorXs& dx, const VectorXs& dv, const scalar& dt);
-
-    void stepConstrainted(const scalar& dt);
+    /**
+     * Returns the indices of the constrained vertices that are not fully constrained (circulations
+     * on those vertices don't matter) and are not on open boundary (the constraint solve there is
+     * different and they should have already been handled by the OB solve).
+     *
+     * @param open_boundary_vertices The vertices on the open boundary.
+     */
+    std::vector<size_t> getRelevantContrainedVertices(const std::vector<size_t>& open_boundary_vertices) const;
 
     double delta() const { return m_delta; }
 
@@ -178,8 +171,10 @@ class VS3D
     std::vector<size_t> getNumberVerticesIncidentToRegions() const;
 
     bool isVertexConstrained(size_t vert) const;
+
+
     /**
-     * projectVelocity with vertices_indices being every vertex index.
+     * call projectVelocity with vertices_indices being every vertex index.
      */
     void projectVelocity(
             const std::vector<Vec3d>& direction,
@@ -211,6 +206,7 @@ class VS3D
     Vec3d getTriangleCenter(size_t triangle_index) const;
     Vec3d getTriangleSheetStrength(size_t triangle_index) const;
     Vec3d getVertexOppositeEdgeInTriangle(size_t vertex_index, size_t triangle_index) const;
+    bool isVertexIncidentToEdge(size_t vertex_index, size_t edge_index) const;
     /**
      *  Return the normal of a manifold vertex. The normal goes from the region with the lowest
      *  index to the one with higher index.
@@ -430,14 +426,10 @@ class VS3D
     std::vector<unsigned char> m_constrained_fixed;
     std::unordered_set<size_t> m_constrained_mapping;
 
-    std::vector<Force*> m_forces;
-
     std::vector<Vec3d> m_obefc;  // open boundary extra face centers
     std::vector<Vec3d> m_obefe;  // open boundary extra face vorticity direction (i.e. edge tangent)
     std::vector<Vec3d> m_obefn;  // open boundary extra face normals
     std::vector<double> m_obefv; // open boundary extra face vorticity magnitudes
-
-    SceneStepper* m_constraint_stepper;
 };
 
 #endif /* defined(__MultiTracker__VS3D__) */
