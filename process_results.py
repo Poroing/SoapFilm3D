@@ -91,7 +91,7 @@ def plot(simulation_parameter_product, args, output_directory):
                 ])
 
 def compileExecutionTime(rows):
-    execution_time = [ row.get('NaiveExecution', row.get('FMMExecution', None)) for row in rows ]
+    execution_time = [ row['BiotSavartExecution'] for row in rows ]
     number_vertices = [ row['NumberVertices'] for row in rows ]
     execution_time.sort()
     return {
@@ -352,7 +352,7 @@ class Csv(Process):
             csv_writer.writerows(data)
 
 class CsvExecutionTime(Csv):
-    TOKEN = ['NumberVertices', 'FMMExecution', 'NaiveExecution']
+    TOKEN = ['NumberVertices', 'BiotSavartExecution']
 
     def processLine(self, line_tokens):
         if line_tokens[0] not in self.TOKEN:
@@ -387,10 +387,8 @@ class CsvTimeStepExecutionTime(CsvExecutionTime):
         if data is not None:
             if 'NumberVertices' in data:
                 self.number_vertices = data['NumberVertices']
-            elif 'NaiveExecution' in data:
-                self.total_biot_savart_execution_time += data['NaiveExecution']
-            elif 'FMMExecution' in data:
-                self.total_biot_savart_execution_time += data['FMMExecution']
+            elif 'BiotSavartExecution' in data:
+                self.total_biot_savart_execution_time += data['BiotSavartExecution']
             return None
         elif line_tokens[0] == 'SmoothingExecution':
             self.smoothing_execution_time += float(line_tokens[1])
