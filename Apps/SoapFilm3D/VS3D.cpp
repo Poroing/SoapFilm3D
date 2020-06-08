@@ -2042,7 +2042,7 @@ VS3D::post_t1(const LosTopos::SurfTrack& st, size_t v, size_t a, size_t b, void*
 
     if (Options::boolValue("print-t1-info"))
     {
-        std::cout << "v Gammas: " << std::endl << Gamma(v).values << std::endl;
+        std::cout << "v Gammas: " << std::endl << Gamma(v) << std::endl;
     }
 
     for (size_t vother_index = 0; vother_index < td->neighbor_verts.size(); ++vother_index)
@@ -2062,8 +2062,7 @@ VS3D::post_t1(const LosTopos::SurfTrack& st, size_t v, size_t a, size_t b, void*
 
         if (Options::boolValue("print-t1-info"))
         {
-            std::cout << "Gammas: " << std::endl
-                      << Gamma(previously_adjacent_vertex).values << std::endl;
+            std::cout << "Gammas: " << std::endl << Gamma(previously_adjacent_vertex) << std::endl;
         }
     }
 }
@@ -2092,9 +2091,15 @@ VS3D::post_facesplit(const LosTopos::SurfTrack& st, size_t f, size_t new_vertex,
 {
     FaceSplitTempData* td = (FaceSplitTempData*)data;
 
-    (*m_Gamma)[new_vertex] = GammaType(m_nregion);
-    (*m_Gamma)[new_vertex].values =
-      ((*m_Gamma)[td->v0].values + (*m_Gamma)[td->v1].values + (*m_Gamma)[td->v2].values) / 3;
+    Gamma(new_vertex) = GammaType(m_nregion);
+    for (const Vec2i& region_pair : getVertexIncidentRegionPairs(new_vertex))
+    {
+        Gamma(new_vertex)
+          .set(region_pair,
+               (Gamma(td->v0).get(region_pair) + Gamma(td->v1).get(region_pair)
+                + Gamma(td->v2).get(region_pair))
+                 / 3);
+    }
 }
 
 struct SnapTempData
@@ -2207,9 +2212,9 @@ VS3D::post_snap(const LosTopos::SurfTrack& st, size_t v_kept, size_t v_deleted, 
 
     if (Options::boolValue("print-snap-info"))
     {
-        std::cout << "v0 Gamma = " << std::endl << Gamma(td->v0).values << std::endl;
-        std::cout << "v1 Gamma = " << std::endl << Gamma(td->v1).values << std::endl;
-        std::cout << "new Gamma = " << std::endl << newGamma.values << std::endl;
+        std::cout << "v0 Gamma = " << Gamma(td->v0) << std::endl;
+        std::cout << "v1 Gamma = " << Gamma(td->v1) << std::endl;
+        std::cout << "new Gamma = " << newGamma << std::endl;
     }
     Gamma(v_kept) = newGamma;
 }

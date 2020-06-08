@@ -1110,7 +1110,7 @@ Sim::showPrimitiveInfo()
         std::cout << "Vertex of Interest: " << m_nearest_vertex << " ("
                   << m_vs->pos(m_nearest_vertex).transpose() << ")" << std::endl;
         std::cout << "  circulation = " << std::endl
-                  << m_vs->Gamma(m_nearest_vertex).values << std::endl;
+                  << m_vs->Gamma(m_nearest_vertex) << std::endl;
         if (m_vs->m_dbg_v1.size() == m_vs->mesh().nv())
         {
             std::cout << "  dbg v1 = ";

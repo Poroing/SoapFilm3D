@@ -18,7 +18,7 @@ bool MeshIO::save(VS3D & vs, const std::string & filename, bool binary)
         std::ofstream os(filename.c_str(), std::ios::binary);
         size_t n;
         
-        n = vs.Gamma(0).values.cols(); // nregion
+        n = vs.Gamma(0).m_number_regions; // nregion
         os.write((char *)&n, sizeof (size_t));
 
         n = st.m_mesh.nv();
@@ -30,10 +30,10 @@ bool MeshIO::save(VS3D & vs, const std::string & filename, bool binary)
             os.write((char *)&(x[1]), sizeof (x[1]));
             os.write((char *)&(x[2]), sizeof (x[2]));
             
-            for (int j = 0; j < vs.Gamma(i).values.rows(); j++)
-                for (int k = 0; k < vs.Gamma(i).values.cols(); k++)
+            for (int j = 0; j < vs.Gamma(i).m_number_regions; j++)
+                for (int k = 0; k < vs.Gamma(i).m_number_regions; k++)
                 {
-                    double Gamma = vs.Gamma(i).values(j, k);
+                    double Gamma = vs.Gamma(i).get(j, k);
                     os.write((char *)(&Gamma), sizeof (Gamma));
                 }
         }
@@ -72,15 +72,15 @@ bool MeshIO::save(VS3D & vs, const std::string & filename, bool binary)
     } else
     {
         std::ofstream os(filename.c_str());
-        os << vs.Gamma(0).values.cols() << std::endl;  // nregion
+        os << vs.Gamma(0).m_number_regions << std::endl;  // nregion
         os << st.m_mesh.nv() << std::endl;
         for (size_t i = 0; i < st.m_mesh.nv(); i++)
         {
             os << st.get_position(i);
             
-            for (int j = 0; j < vs.Gamma(i).values.rows(); j++)
-                for (int k = 0; k < vs.Gamma(i).values.cols(); k++)
-                    os << " " << vs.Gamma(i).values(j, k);
+            for (int j = 0; j < vs.Gamma(i).m_number_regions; j++)
+                for (int k = 0; k < vs.Gamma(i).m_number_regions; k++)
+                    os << " " << vs.Gamma(i).get(j, k);
             os << std::endl;
         }
         
@@ -148,12 +148,15 @@ bool MeshIO::load(VS3D & vs, const std::string & filename, bool binary)
             is.read((char *)&(x[2]), sizeof (x[2]));
             pos[i] = x;
             
-            for (int j = 0; j < Gammas[i].values.cols(); j++)
-                for (int k = 0; k < Gammas[i].values.cols(); k++)
+            for (int j = 0; j < Gammas[i].m_number_regions; j++)
+                for (int k = 0; k < Gammas[i].m_number_regions; k++)
                 {
                     double Gamma;
                     is.read((char *)&Gamma, sizeof (Gamma));
-                    Gammas[i].values(j, k) = Gamma;
+                    if (Gamma != 0)
+                    {
+                        Gammas[i].set(j, k, Gamma);
+                    }
                 }
         }
         
@@ -248,12 +251,15 @@ bool MeshIO::load(VS3D & vs, const std::string & filename, bool binary)
             is >> x[0] >> x[1] >> x[2];
             pos[i] = x;
 
-            for (int j = 0; j < Gammas[i].values.rows(); j++)
-                for (int k = 0; k < Gammas[i].values.cols(); k++)
+            for (int j = 0; j < Gammas[i].m_number_regions; j++)
+                for (int k = 0; k < Gammas[i].m_number_regions; k++)
                 {
                     double Gamma;
                     is >> Gamma;
-                    Gammas[i].values(j, k) = Gamma;
+                    if (Gamma != 0.)
+                    {
+                        Gammas[i].set(j, k, Gamma);
+                    }
                 }
         }
         

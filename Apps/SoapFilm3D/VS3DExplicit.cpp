@@ -313,7 +313,11 @@ VS3D::step_explicit(double dt)
 
     // damping
     for (size_t i = 0; i < mesh().nv(); i++)
-        (*m_Gamma)[i].values *= pow(simOptions().damping_coef, dt);
+        for (const Vec2i& region_pair : getVertexIncidentRegionPairs(i))
+        {
+            Gamma(i).set(region_pair, Gamma(i).get(region_pair) * pow(simOptions().damping_coef, dt));
+
+        }
 
     std::cout << "Explicit time stepping finished" << std::endl;
 }

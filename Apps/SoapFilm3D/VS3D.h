@@ -267,54 +267,90 @@ class VS3D
     {
       public:
         GammaType() {}
-        GammaType(int nregion) { values = MatXd::Zero(nregion, nregion); }
-        void setZero() { values.setZero(); }
+        GammaType(int number_regions):m_number_regions(number_regions) {}
+        void setZero() { values.clear(); }
 
-        void set(const Vec2i& l, double v)
+        void set(Vec2i l, double v)
         {
             assert_valid(l[0], l[1]);
-            (l[0] < l[1] ? values(l[0], l[1]) : values(l[1], l[0])) = v * (l[0] < l[1] ? 1 : -1);
+
+            if (l[0] >= l[1])
+            {
+                v *= -1;
+                std::swap(l[0], l[1]);
+            }
+
+            auto it = values.find(l);
+            if (it == values.end())
+            {
+                values.insert({l, v});
+            }
+            else
+            {
+                it->second = v;
+            }
         }
+
         void set(const LosTopos::Vec2i& l, double v)
         {
-            assert_valid(l[0], l[1]);
-            (l[0] < l[1] ? values(l[0], l[1]) : values(l[1], l[0])) = v * (l[0] < l[1] ? 1 : -1);
+            set(vc(l), v);
         }
         void set(int l0, int l1, double v)
         {
-            assert_valid(l0, l1);
-            (l0 < l1 ? values(l0, l1) : values(l1, l0)) = v * (l0 < l1 ? 1 : -1);
+            set(Vec2i(l0, l1), v);
         }
 
-        double get(const Vec2i& l) const
+        double get(Vec2i l) const
         {
             assert_valid(l[0], l[1]);
-            return (l[0] < l[1] ? values(l[0], l[1]) : -values(l[1], l[0]));
+            double sign = 1.;
+            if (l[0] >= l[1])
+            {
+                std::swap(l[0], l[1]);
+                sign = -1;
+            }
+            auto it = values.find(l);
+            if (it == values.end())
+            {
+                return 0;
+            }
+            else
+            {
+                return sign * it->second;
+            }
         }
         double get(const LosTopos::Vec2i& l) const
         {
-            assert_valid(l[0], l[1]);
-            return (l[0] < l[1] ? values(l[0], l[1]) : -values(l[1], l[0]));
+            return get(vc(l));
         }
         double get(int l0, int l1) const
         {
-            assert_valid(l0, l1);
-            return (l0 < l1 ? values(l0, l1) : -values(l1, l0));
+            return get(Vec2i(l0, l1));
         }
 
         void assert_valid(int l0, int l1) const
         {
-            assert(values.cols() == values.rows());
             assert(l0 >= 0);
             assert(l1 >= 0);
-            assert(l0 < values.cols());
-            assert(l1 < values.rows());
+            assert(l0 < m_number_regions);
+            assert(l1 < m_number_regions);
+        }
+
+        friend std::ostream& operator<<(std::ostream& os, const GammaType& gamma)
+        {
+            os << "[ ";
+            for (auto& [region_pair, value] : gamma.values){
+                os << "( " << region_pair[0] << ", " << region_pair[1] << " )" << " : " << value <<", ";
+            }
+            os << " ]";
+            return os;
+
         }
 
       public:
-        MatXd
-          values; // only uses the upper triangular half (values(i,j), i < j). values(i,j) satisfies
-                  // that the tangential velocity jump delta u = u(i) - u(j) = grad values(i,j)
+        //Only store the region pair were the first region is lower than the second.
+        std::map<Vec2i, double, Vec2iComp> values;
+        size_t m_number_regions;
     };
 
     const GammaType& Gamma(size_t v) const { return (*m_Gamma)[v]; }
