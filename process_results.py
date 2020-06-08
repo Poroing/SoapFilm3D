@@ -91,7 +91,7 @@ def plot(simulation_parameter_product, args, output_directory):
                 ])
 
 def compileExecutionTime(rows):
-    execution_time = [ row.get('NaiveExecution', row.get('FMMExecution', None)) for row in rows ]
+    execution_time = [ row['BiotSavartExecution'] for row in rows ]
     number_vertices = [ row['NumberVertices'] for row in rows ]
     execution_time.sort()
     return {
@@ -111,16 +111,18 @@ def compileMeanBubbleNumberVertices(rows):
 def compileStepExecutionTime(rows):
     step_execution_time = [ row['StepExecution'] for row in rows ]
     biot_savart_execution_time = [ row['BiotSavartExecution'] for row in rows ]
-    step_execution_time = [ row['SmoothingExecution'] for row in rows ]
+    smoothing_execution_time = [ row['SmoothingExecution'] for row in rows ]
     integration_execution_time = [ row['IntegrationExecution'] for row in rows ]
     improve_mesh_execution_time = [ row['ImproveMeshExecution'] for row in rows ]
+    topology_change_execution_time = [ row['TopologyChangeExecution'] for row in rows ]
     number_vertices = [ row['NumberVertices'] for row in rows ]
     return {
             'MeanStepExecutionTime' : sum(map(float, step_execution_time)) / len(step_execution_time),
             'MeanStepBiotSavartExecutionTime' : sum(map(float, biot_savart_execution_time)) / len(biot_savart_execution_time),
             'MeanStepSmoothingExecutionTime' : sum(map(float, smoothing_execution_time)) / len(smoothing_execution_time),
             'MeanStepIntegrationExecutionTime' : sum(map(float, integration_execution_time)) / len(integration_execution_time),
-            'MeanStepImproveMeshExecutionTime' : sum(map(float, improve_mesh_execution_time)) / len(improve_mesh_execution_time)
+            'MeanStepImproveMeshExecutionTime' : sum(map(float, improve_mesh_execution_time)) / len(improve_mesh_execution_time),
+            'MeanStepTopologyChange' : sum(map(float, topology_change_execution_time)) / len(topology_change_execution_time)
         }
 
 def compile(output_directory, path, stem, compile_function, args):
@@ -142,15 +144,20 @@ def aggregate(
     for paths_and_configs in simulation_parameter_product.iterateOnSets([ args.aggregate_on ]):
         data = []
         for path, config in paths_and_configs:
+            print(f'Working on {path}') 
             if not (output_directory / path).exists() and ignore_non_existing:
+                print('Do Not Exists')
                 continue
             if (
                     ignore_timedout
                     and hasTimedout(output_directory, path, config.get('simulation-time', 4.0))
                 ):
+                print('Timedout')
                 continue
             if ignore_error and hasError(output_directory, path): 
+                print('Error')
                 continue
+            print(f'Not Skipped')
 
             compiled_data = { args.aggregate_on : config[args.aggregate_on] }
             if args.execution_time_file_stem is not None:
@@ -345,7 +352,7 @@ class Csv(Process):
             csv_writer.writerows(data)
 
 class CsvExecutionTime(Csv):
-    TOKEN = ['NumberVertices', 'FMMExecution', 'NaiveExecution']
+    TOKEN = ['NumberVertices', 'BiotSavartExecution']
 
     def processLine(self, line_tokens):
         if line_tokens[0] not in self.TOKEN:
@@ -371,6 +378,7 @@ class CsvTimeStepExecutionTime(CsvExecutionTime):
         self.integration_execution_time = 0
         self.number_vertices = 0
         self.improve_mesh_execution_time = 0
+        self.topology_change_execution_time = 0
         super().run(path, config)
 
 
@@ -379,10 +387,8 @@ class CsvTimeStepExecutionTime(CsvExecutionTime):
         if data is not None:
             if 'NumberVertices' in data:
                 self.number_vertices = data['NumberVertices']
-            elif 'NaiveExecution' in data:
-                self.total_biot_savart_execution_time += data['NaiveExecution']
-            elif 'FMMExecution' in data:
-                self.total_biot_savart_execution_time += data['FMMExecution']
+            elif 'BiotSavartExecution' in data:
+                self.total_biot_savart_execution_time += data['BiotSavartExecution']
             return None
         elif line_tokens[0] == 'SmoothingExecution':
             self.smoothing_execution_time += float(line_tokens[1])
@@ -390,6 +396,8 @@ class CsvTimeStepExecutionTime(CsvExecutionTime):
             self.integration_execution_time += float(line_tokens[1])
         elif line_tokens[0] == 'ImproveMeshExecution':
             self.improve_mesh_execution_time += float(line_tokens[1])
+        elif line_tokens[0] == 'TopologyChangeExecution':
+            self.topology_change_execution_time += float(line_tokens[1])
         elif line_tokens[0] == 'StepExecution':
             data = {
                 'NumberVertices' : self.number_vertices,
@@ -397,12 +405,14 @@ class CsvTimeStepExecutionTime(CsvExecutionTime):
                 'StepExecution' : float(line_tokens[1]),
                 'SmoothingExecution' : self.smoothing_execution_time,
                 'IntegrationExecution' : self.integration_execution_time,
-                'ImproveMeshExecution' : self.improve_mesh_execution_time
+                'ImproveMeshExecution' : self.improve_mesh_execution_time,
+                'TopologyChangeExecution' : self.topology_change_execution_time
             }
             self.total_biot_savart_execution_time = 0
             self.smoothing_execution_time = 0
             self.integration_execution_time = 0
             self.improve_mesh_execution_time = 0
+            self.topology_change_execution_time = 0
             return data
         return None
 

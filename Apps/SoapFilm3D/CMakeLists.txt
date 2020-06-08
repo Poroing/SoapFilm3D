@@ -47,6 +47,8 @@ list(FILTER SoapFilm3D_SOURCES EXCLUDE REGEX .*tests.cpp)
 
 add_executable (SoapFilm3D ${Headers} ${SoapFilm3D_SOURCES})
 target_link_libraries (SoapFilm3D LosTopos ${DEFAULT_LIBRARIES})
+target_compile_features (SoapFilm3D PUBLIC cxx_std_17)
 
 add_executable (Tests ${Headers} ${Tests_SOURCES})
 target_link_libraries (Tests LosTopos ${DEFAULT_LIBRARIES})
+target_compile_features (Tests PUBLIC cxx_std_17)
