@@ -72,14 +72,25 @@ BiotSavart_fmmtl(const std::vector<Vec3d>& sources,
     typedef kernel_type::result_type result_type;
 
     // Init points and charges
-    std::vector<source_type> fmmtl_sources;
-    std::vector<target_type> fmmtl_targets;
-    std::vector<charge_type> fmmtl_charges;
+    std::vector<source_type> fmmtl_sources(sources.size());
+    std::vector<target_type> fmmtl_targets(targets.size());
+    std::vector<charge_type> fmmtl_charges(charges.size());
 
     auto convert_to_fmmtl = [](const Vec3d& v) { return Vec<3, double>(v[0], v[1], v[2]); };
-    boost::transform(sources, std::back_inserter(fmmtl_sources), convert_to_fmmtl);
-    boost::transform(targets, std::back_inserter(fmmtl_targets), convert_to_fmmtl);
-    boost::transform(charges, std::back_inserter(fmmtl_charges), convert_to_fmmtl);
+#pragma omp parallel
+    {
+#pragma omp for nowait
+        for (size_t target_index = 0; target_index < targets.size(); ++target_index)
+        {
+            fmmtl_targets[target_index] = convert_to_fmmtl(targets[target_index]);
+        }
+
+        for (size_t source_index = 0; source_index < sources.size(); ++source_index)
+        {
+            fmmtl_sources[source_index] = convert_to_fmmtl(sources[source_index]);
+            fmmtl_charges[source_index] = convert_to_fmmtl(charges[source_index]);
+        }
+    }
 
     // Build the FMM
     fmmtl::kernel_matrix<kernel_type> A = K(fmmtl_targets, fmmtl_sources);
@@ -115,15 +126,19 @@ BiotSavart_fast_winding_number(const std::vector<Vec3d>& sources,
     Eigen::MatrixX3d libigl_charges(Eigen::MatrixX3d::Zero(charges.size(), 3));
     Eigen::MatrixX3d libigl_targets(Eigen::MatrixX3d::Zero(targets.size(), 3));
 
-    for (size_t target_index : boost::irange(0lu, targets.size()))
+#pragma omp parallel
     {
-        libigl_targets.row(target_index) = targets[target_index];
-    }
+#pragma omp for nowait
+        for (size_t target_index = 0; target_index < targets.size(); ++target_index)
+        {
+            libigl_targets.row(target_index) = targets[target_index];
+        }
 
-    for (size_t source_index : boost::irange(0lu, sources.size()))
-    {
-        libigl_sources.row(source_index) = sources[source_index];
-        libigl_charges.row(source_index) = charges[source_index];
+        for (size_t source_index = 0; source_index < sources.size(); ++source_index)
+        {
+            libigl_sources.row(source_index) = sources[source_index];
+            libigl_charges.row(source_index) = charges[source_index];
+        }
     }
 
     // Build the FMM
@@ -155,22 +170,27 @@ BiotSavart(VS3D& vs, const VecXd& dx)
 
     Clock biot_savart_duration;
     // Init points and charges
-    std::vector<Vec3d> sources;
-    std::vector<Vec3d> targets;
-    std::vector<Vec3d> charges;
+    std::vector<Vec3d> sources(vs.mesh().nt());
+    std::vector<Vec3d> targets(vs.mesh().nv());
+    std::vector<Vec3d> charges(vs.mesh().nt());
 
-    for (size_t vertex_index : boost::irange(0lu, vs.mesh().nv()))
+#pragma omp parallel
     {
-        targets.push_back(vs.pos(vertex_index));
-    }
+#pragma omp for nowait
+        for (size_t vertex_index = 0; vertex_index < vs.mesh().nv(); ++vertex_index)
+        {
+            targets[vertex_index] = vs.pos(vertex_index);
+        }
 
-    for (size_t triangle_index : boost::irange(0lu, vs.mesh().nt()))
-    {
-        if (vs.surfTrack()->triangle_is_all_solid(triangle_index))
-            continue; // all-solid faces don't contribute vorticity.
+#pragma omp for nowait
+        for (size_t triangle_index = 0; triangle_index < vs.mesh().nt(); ++triangle_index)
+        {
+            if (vs.surfTrack()->triangle_is_all_solid(triangle_index))
+                continue; // all-solid faces don't contribute vorticity.
 
-        sources.push_back(vs.getTranslatedTriangleCenter(triangle_index, dx));
-        charges.push_back(vs.getTranslatedTriangleSheetStrength(triangle_index, dx));
+            sources[triangle_index] = vs.getTranslatedTriangleCenter(triangle_index, dx);
+            charges[triangle_index] = vs.getTranslatedTriangleSheetStrength(triangle_index, dx);
+        }
     }
 
     // open boundary extra face contributions

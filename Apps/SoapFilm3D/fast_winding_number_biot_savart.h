@@ -8,9 +8,11 @@
 #include "igl/parallel_for.h"
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include <boost/range/irange.hpp>
 #include <cassert>
 #include <vector>
-#include <boost/range/irange.hpp>
+
+#include "fmmtl/fmmtl/util/Clock.hpp"
 
 namespace igl
 {
@@ -318,14 +320,15 @@ igl::fast_winding_number_biot_savart(const Eigen::MatrixBase<DerivedP>& P,
             SecondDerivative(1, 1) += d;
             SecondDerivative(2, 2) += d;
 
-            Eigen::Matrix<real_ec, 1, 9> ExpansionCoefficientsRow = EC.row(child_index).template segment<9>(3);
-            Eigen::Matrix<real_ec, 3, 3> ExpansionCoefficients = Eigen::Matrix<real_ec, 3, 3>::Map(ExpansionCoefficientsRow.data());
+            Eigen::Matrix<real_ec, 1, 9> ExpansionCoefficientsRow =
+              EC.row(child_index).template segment<9>(3);
+            Eigen::Matrix<real_ec, 3, 3> ExpansionCoefficients =
+              Eigen::Matrix<real_ec, 3, 3>::Map(ExpansionCoefficientsRow.data());
 
             for (size_t row : boost::irange(0lu, 3lu))
             {
                 wn -= ExpansionCoefficients.row(row).cross(SecondDerivative.row(row));
             }
-
         }
         if (EC.row(child_index).size() > 3 + 9)
         {
@@ -350,8 +353,10 @@ igl::fast_winding_number_biot_savart(const Eigen::MatrixBase<DerivedP>& P,
                 Eigen::Matrix<real_ec, 3, 3> ThirdDerivative =
                   15.0 * loc(i) * locTloc + (-3.0 / (PI_4_r5)) * (RowCol_Diagonal);
 
-                Eigen::Matrix<real_ec, 1, 9> ExpansionCoefficientsRow = EC.row(child_index).template segment<9>(12 + i * 9);
-                Eigen::Matrix<real_ec, 3, 3> ExpansionCoefficients = Eigen::Matrix<real_ec, 3, 3>::Map(ExpansionCoefficientsRow.data());
+                Eigen::Matrix<real_ec, 1, 9> ExpansionCoefficientsRow =
+                  EC.row(child_index).template segment<9>(12 + i * 9);
+                Eigen::Matrix<real_ec, 3, 3> ExpansionCoefficients =
+                  Eigen::Matrix<real_ec, 3, 3>::Map(ExpansionCoefficientsRow.data());
                 for (size_t row : boost::irange(0lu, 3lu))
                 {
                     wn -= ExpansionCoefficients.row(row).cross(ThirdDerivative.row(row));
@@ -424,11 +429,15 @@ igl::fast_winding_number_biot_savart(const Eigen::MatrixBase<DerivedP>& P,
 
     if (beta > 0)
     {
-        const std::vector<int> near_indices_start = { 0 };
-        igl::parallel_for(
-          m,
-          [&](int iter) { WN.row(iter) = helper(Q.row(iter).eval(), near_indices_start); },
-          1000);
+#pragma omp parallel
+        {
+#pragma omp for nowait
+            for (size_t target_index = 0; target_index < m; ++target_index)
+            {
+                const std::vector<int> near_indices_start = { 0 };
+                WN.row(target_index) = helper(Q.row(target_index).eval(), near_indices_start);
+            }
+        }
     }
     else
     {
