@@ -10,6 +10,7 @@
 #include <Eigen/Geometry>
 #include <cassert>
 #include <vector>
+#include <boost/range/irange.hpp>
 
 namespace igl
 {
@@ -295,8 +296,7 @@ igl::fast_winding_number_biot_savart(const Eigen::MatrixBase<DerivedP>& P,
                                       const Eigen::Matrix<real_ec, 1, 3>& anorm) -> WnRowVec {
         const typename RowVec::Scalar loc_norm = std::sqrt(loc.norm() * loc.norm() + delta * delta);
         WnRowVec result;
-        igl::cross(anorm, loc, result);
-        return -result / (PI_4 * (loc_norm * loc_norm * loc_norm));
+        return -anorm.cross(loc) / (PI_4 * (loc_norm * loc_norm * loc_norm));
     };
 
     auto expansion_eval = [&direct_eval, &EC, &PI_4, delta](const RowVec& loc,
@@ -318,14 +318,14 @@ igl::fast_winding_number_biot_savart(const Eigen::MatrixBase<DerivedP>& P,
             SecondDerivative(1, 1) += d;
             SecondDerivative(2, 2) += d;
 
-            Eigen::Matrix<real_wn, 3, 3> TempCoeffs;
             Eigen::Matrix<real_ec, 1, 9> ExpansionCoefficientsRow = EC.row(child_index).template segment<9>(3);
             Eigen::Matrix<real_ec, 3, 3> ExpansionCoefficients = Eigen::Matrix<real_ec, 3, 3>::Map(ExpansionCoefficientsRow.data());
-            igl::cross(ExpansionCoefficients, SecondDerivative, TempCoeffs);
-            for (size_t i = 0; i < 3; ++i)
+
+            for (size_t row : boost::irange(0lu, 3lu))
             {
-                wn -= TempCoeffs.row(i);
+                wn -= ExpansionCoefficients.row(row).cross(SecondDerivative.row(row));
             }
+
         }
         if (EC.row(child_index).size() > 3 + 9)
         {
@@ -350,14 +350,11 @@ igl::fast_winding_number_biot_savart(const Eigen::MatrixBase<DerivedP>& P,
                 Eigen::Matrix<real_ec, 3, 3> ThirdDerivative =
                   15.0 * loc(i) * locTloc + (-3.0 / (PI_4_r5)) * (RowCol_Diagonal);
 
-                Eigen::Matrix<real_wn, 3, 3> TempCoeffs;
                 Eigen::Matrix<real_ec, 1, 9> ExpansionCoefficientsRow = EC.row(child_index).template segment<9>(12 + i * 9);
                 Eigen::Matrix<real_ec, 3, 3> ExpansionCoefficients = Eigen::Matrix<real_ec, 3, 3>::Map(ExpansionCoefficientsRow.data());
-                igl::cross(ExpansionCoefficients, ThirdDerivative, TempCoeffs);
-
-                for (size_t j = 0; j < 3; ++j)
+                for (size_t row : boost::irange(0lu, 3lu))
                 {
-                    wn -= TempCoeffs.row(j);
+                    wn -= ExpansionCoefficients.row(row).cross(ThirdDerivative.row(row));
                 }
             }
         }
