@@ -137,8 +137,17 @@ class VS3D
     }
     void getRegionPairIncidentTriangles(const Vec2i& region_pair, std::vector<size_t>& triangle_indices) const;
     bool isTriangleIncidentToRegionPair(size_t triangle_index, const Vec2i& region_pair) const;
+    bool isTriangleIncidentToRegion(size_t triangle_index, int region) const;
+    int getTriangleOtherIncidentRegion(size_t triangle_index, int region) const;
     size_t getVertexDegree(size_t vertex_index) const;
     double getVertexAreaIncidentToRegionPair(size_t vertex_index, const Vec2i& region_pair) const;
+    double getVertexAreaIncidentToRegion(size_t vertex_index, int region) const;
+    bool isEdgeTripleJunction(size_t edge_index) const;
+    /**
+     *  Return the given edge tangent, from the first vertex to the second.
+     */
+    Vec3d getEdgeTangent(size_t edge_index) const;
+    double getEdgeLength(size_t edge_index) const;
 
     MatXd getIglReadyPositions() const;
     MatXi getIglReadyTriangles() const;
@@ -146,6 +155,19 @@ class VS3D
     MatXi getIglReadyTrianglesIncidentToRegionPair(const Vec2i& region_pair) const;
 
     void update_dbg_quantities();
+    /**
+     *  Returns each vertices mapping from region to the associated mean curvature.
+     */
+    std::vector<std::map<int, double>> getMeanCurvatures() const;
+    /**
+     *  Returns each vertices mapping from region to the associated mean curvature from the given
+     *  edge aligned curvatures.
+     */
+    std::vector<std::map<int, double>> getMeanCurvatures(const std::vector<std::map<int, double>>& edge_aligned_curvatures) const;
+    /**
+     *  Returns each edges mapping from region to the associated edge-aligned cuvature.
+     */
+    std::vector<std::map<int, double>> getEdgeAlignedCurvatures() const;
 
     const std::vector<size_t>& constrainedVertices() const { return m_constrained_vertices; }
     std::vector<size_t>& constrainedVertices() { return m_constrained_vertices; }
@@ -236,6 +258,10 @@ class VS3D
     {
         return vc(surfTrack()->get_triangle_normal_by_region(triangle_index, region));
     }
+    Vec3d getTriangleNormalAwayFromRegion(size_t triangle_index, int region) const
+    {
+        return getTriangleNormalTowardRegion(triangle_index, getTriangleOtherIncidentRegion(triangle_index, region));
+    }
     /**
      *  Return the pair of incident region of a manifold vertex.
      */
@@ -280,15 +306,7 @@ class VS3D
                 std::swap(l[0], l[1]);
             }
 
-            auto it = values.find(l);
-            if (it == values.end())
-            {
-                values.insert({l, v});
-            }
-            else
-            {
-                it->second = v;
-            }
+            values[l] = v;
         }
 
         void set(const LosTopos::Vec2i& l, double v)
@@ -469,8 +487,8 @@ class VS3D
 
     std::vector<Vec3d> m_dbg_t1;
     std::vector<Vec3d> m_dbg_t2;
-    std::vector<std::vector<double>> m_dbg_e1;
-    std::vector<std::vector<double>> m_dbg_v1;
+    std::vector<std::map<int, double>> m_dbg_e1;
+    std::vector<std::map<int, double>> m_dbg_v1;
     std::vector<Vec3d> m_dbg_v2;
 
     // constrained vertices

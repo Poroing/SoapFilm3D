@@ -12,6 +12,7 @@
 #include "ADT/advec.h"
 #include "LosTopos/LosTopos3D/subdivisionscheme.h"
 #include "SimOptions.h"
+#include "GeometryUtil.h"
 #include "fmmtl/fmmtl/util/Clock.hpp"
 
 #include <Eigen/IterativeLinearSolvers>
@@ -376,9 +377,6 @@ VS3D::step(double dt)
 
     std::vector<size_t> relevant_constrained_vertices =
       getRelevantContrainedVertices(open_boundary_vertices);
-    std::cout << "Relevant Contrained Vertices: ";
-    boost::copy(relevant_constrained_vertices, std::ostream_iterator<size_t>(std::cout, " "));
-    std::cout << std::endl;
     size_t nc = relevant_constrained_vertices.size();
 
 #warning There should be a way to factorize this with the BiotSavart function.
@@ -663,14 +661,18 @@ VS3D::umbrellaSmoothing(double dt)
                != vertex_incident_region_pairs.end();
     };
 
+    // We use a variation of the umbrella laplacian on the mesh restrained to vertices incident
+    // each region pairs.
     for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
     {
         std::vector<Vec2i>& vertex_incident_region_pairs =
           vertices_incident_region_pairs[vertex_index];
+        // Iterate on each region pair incident to the current vertex
         for (size_t region_pair_index : boost::irange(0lu, vertex_incident_region_pairs.size()))
         {
             Vec2i& region_pair = vertex_incident_region_pairs[region_pair_index];
             double umbrella_laplacian = 0;
+            size_t number_adjacent_vertices;
             for (std::size_t adjacent_vertex_index : getVertexAdjacentVertices(vertex_index))
             {
                 if (!is_incident_to_region_pair(adjacent_vertex_index, region_pair))
@@ -680,9 +682,11 @@ VS3D::umbrellaSmoothing(double dt)
 
                 umbrella_laplacian += Gamma(adjacent_vertex_index).get(region_pair)
                                       - Gamma(vertex_index).get(region_pair);
+                ++number_adjacent_vertices;
             }
 
             umbrella_laplacian /= getVertexAreaIncidentToRegionPair(vertex_index, region_pair);
+            //umbrella_laplacian *= 6. / (double)number_adjacent_vertices;
             new_gammas[vertex_index][region_pair_index] =
               Gamma(vertex_index).get(region_pair)
               + simOptions().smoothing_coef * dt * umbrella_laplacian;
@@ -823,6 +827,31 @@ VS3D::isTriangleIncidentToRegionPair(size_t triangle_index, const Vec2i& region_
            || (region_pair[0] == triangle_label[1] && region_pair[1] == triangle_label[0]);
 }
 
+bool
+VS3D::isTriangleIncidentToRegion(size_t triangle_index, int region) const
+{
+    LosTopos::Vec2i triangle_label = mesh().get_triangle_label(triangle_index);
+    return triangle_label[0] == region || triangle_label[1] == region;
+}
+
+int
+VS3D::getTriangleOtherIncidentRegion(size_t triangle_index, int region) const
+{
+    LosTopos::Vec2i incident_region = mesh().get_triangle_label(triangle_index);
+    if (incident_region[0] == region)
+    {
+        return incident_region[1];
+    }
+    else if (incident_region[1] == region)
+    {
+        return incident_region[0];
+    }
+    else
+    {
+        return -1;
+    }
+}
+
 size_t
 VS3D::getEdgeOtherVertex(size_t edge_index, size_t vertex_index) const
 {
@@ -850,6 +879,38 @@ VS3D::getVertexAreaIncidentToRegionPair(size_t vertex_index, const Vec2i& region
         area += m_st->get_triangle_area(triangle_index) / 3;
     }
     return area;
+}
+
+double
+VS3D::getVertexAreaIncidentToRegion(size_t vertex_index, int region) const
+{
+    double area = 0;
+    for (size_t triangle_index : mesh().m_vertex_to_triangle_map[vertex_index])
+    {
+        if (!isTriangleIncidentToRegion(triangle_index, region))
+        {
+            continue;
+        }
+
+        area += m_st->get_triangle_area(triangle_index) / 3;
+    }
+    return area;
+}
+
+Vec3d VS3D::getEdgeTangent(size_t edge_index) const
+{
+    return (pos(mesh().m_edges[edge_index][1]) - pos(mesh().m_edges[edge_index][0])).normalized();
+}
+
+double
+VS3D::getEdgeLength(size_t edge_index) const
+{
+    return (pos(mesh().m_edges[edge_index][1]) - pos(mesh().m_edges[edge_index][0])).norm();
+}
+
+bool VS3D::isEdgeTripleJunction(size_t edge_index) const
+{
+    return mesh().m_edge_to_triangle_map[edge_index].size() > 2;
 }
 
 MatXd
@@ -1451,178 +1512,164 @@ VS3D::update_dbg_quantities()
     // compute the mean curvatures
     if (true)
     {
-        m_dbg_v1.clear();
-        m_dbg_e1.clear();
-        m_dbg_v1.resize(mesh().nv(), std::vector<double>(m_nregion, 0));
-        m_dbg_e1.resize(mesh().ne(), std::vector<double>(m_nregion, 0));
+        m_dbg_e1 = getEdgeAlignedCurvatures();
+        m_dbg_v1 = getMeanCurvatures(m_dbg_e1);
+    }
+}
 
-        std::vector<std::vector<double>> curvature(
-          mesh().ne(), std::vector<double>(m_nregion, 0)); // edge-aligned curvature (signed scalar)
-        for (size_t region = 0; region < m_nregion; region++)
+std::vector<std::map<int, double>> VS3D::getMeanCurvatures() const
+{
+    return getMeanCurvatures(getEdgeAlignedCurvatures());
+}
+
+std::vector<std::map<int, double>> VS3D::getMeanCurvatures(const std::vector<std::map<int, double>>& edge_aligned_curvatures) const
+{
+    std::vector<std::map<int, double>> result(mesh().nv());
+ 
+    std::vector<std::map<int, double>> curvature = getEdgeAlignedCurvatures();
+    std::vector<double> avg_vertex_areas(mesh().nv(), 0.);
+
+    for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
+    {
+        std::set<int> incident_region;
+        double vertex_area = 0.0;
+        for (size_t triangle_index : mesh().m_vertex_to_triangle_map[vertex_index])
         {
-            for (size_t i = 0; i < mesh().ne(); i++)
+            const LosTopos::Vec2i& l = mesh().get_triangle_label(triangle_index);
+
+            for (int r = 0; r < 2; ++r)
             {
-                std::vector<size_t>
-                  incident_faces; // faces incident to edge i that have the label of interest
-                                  // (assume there are only two of them for now; this can be false
-                                  // only when complex collision prevents immediate T1 resolution,
-                                  // which is not expected to happen for bubble complexes.)
-                std::set<int> incident_regions;
-                for (size_t j = 0; j < mesh().m_edge_to_triangle_map[i].size(); j++)
-                {
-                    const LosTopos::Vec2i& l =
-                      mesh().get_triangle_label(mesh().m_edge_to_triangle_map[i][j]);
-                    if (l[0] == region || l[1] == region)
-                        incident_faces.push_back(j);
-                    incident_regions.insert(l[0]);
-                    incident_regions.insert(l[1]);
-                }
-                if (incident_faces.size() == 0)
-                    continue;
-                //                assert(incident_faces.size() == 2);
-                if (incident_faces.size() != 2)
-                {
-                    //                    std::cout << "Warning: incident_faces.size() != 2" <<
-                    //                    std::endl; std::cout << "e = " << i << " region = " <<
-                    //                    region << " n = " << incident_faces.size() << ": "; for
-                    //                    (size_t k = 0; k < incident_faces.size(); k++) std::cout
-                    //                    << mesh().m_edge_to_triangle_map[i][incident_faces[k]] <<
-                    //                    " "; std::cout << std::endl;
-                    curvature[i][region] = 0;
-                    continue;
-                }
-                bool nonmanifold = (incident_regions.size() > 2);
-
-                //                assert(mesh().m_edge_to_triangle_map[i].size() == 2);
-                int v0 = mesh().m_edges[i][0];
-                int v1 = mesh().m_edges[i][1];
-                Vec3d x0 = pos(v0);
-                Vec3d x1 = pos(v1);
-                Vec3d et = (x1 - x0);
-
-                int ti0 = mesh().m_edge_to_triangle_map[i][incident_faces[0]];
-                int ti1 = mesh().m_edge_to_triangle_map[i][incident_faces[1]];
-                LosTopos::Vec3st t0 = mesh().get_triangle(ti0);
-                LosTopos::Vec3st t1 = mesh().get_triangle(ti1);
-
-                if (mesh().get_triangle_label(ti0)[mesh().oriented(v0, v1, t0) ? 1 : 0] == region)
-                    std::swap(ti0, ti1),
-                      std::swap(t0, t1); // the region of interest should be to the CCW direction of
-                                         // t0 when looking along the direciton of edge i
-
-                assert(mesh().get_triangle_label(ti0)[mesh().oriented(v0, v1, t0) ? 0 : 1]
-                       == region);
-                assert(mesh().get_triangle_label(ti1)[mesh().oriented(v0, v1, t1) ? 1 : 0]
-                       == region);
-
-                Vec3d n0 = (pos(t0[1]) - pos(t0[0])).cross(pos(t0[2]) - pos(t0[0]));
-                if (mesh().get_triangle_label(ti0)[1] == region)
-                    n0 = -n0; // n0 should point away from the region of interest
-
-                Vec3d n1 = (pos(t1[1]) - pos(t1[0])).cross(pos(t1[2]) - pos(t1[0]));
-                if (mesh().get_triangle_label(ti1)[1] == region)
-                    n1 = -n1; // n1 should point away from the region of interest
-
-                double edgeArea = (n0.norm() + n1.norm()) / 2 / 3;
-                n0.normalize();
-                n1.normalize();
-
-                //                double curvature_i = 0;
-                //                if (nonmanifold)
-                //                {
-                //                    curvature_i = n0.cross(n1).dot(et) / (et.norm() * m_delta); //
-                //                    integral curvature along the curve orghotonal to the edge in
-                //                    plane
-                //                } else
-                //                {
-                //                    curvature_i = n0.cross(n1).dot(et) / edgeArea;
-                ////                    curvature_i = angleAroundAxis(n0, n1, et) * et.norm() /
-                /// edgeArea;
-                //                }
-
-                double curvature_i = n0.cross(n1).dot(et);
-                //                double curvature_i = (n0 - n1).dot((n0 +
-                //                n1).normalized().cross(et));
-
-                curvature[i][region] = curvature_i;
-                //                if (region == 1)
-                //                    m_dbg_e1[i] = curvature_i;
-                m_dbg_e1[i][region] = curvature_i;
+                incident_region.insert(l[r]);
             }
 
-            //            for (size_t i = 0; i < mesh().nv(); i++)
-            //            {
-            //                double mean_curvature = 0;
-            //                for (size_t j = 0; j < mesh().m_vertex_to_edge_map[i].size(); j++)
-            //                    mean_curvature +=
-            //                    curvature[mesh().m_vertex_to_edge_map[i][j]][region];
-            //                mean_curvature /= mesh().m_vertex_to_edge_map[i].size();
-            //
-            //                (*m_Gamma)[i][region] += simOptions().sigma * mean_curvature * dt;
-            //                m_dbg_v1[i][region] = mean_curvature;
-            //            }
+            vertex_area += m_st->get_triangle_area(triangle_index) / 3 * 2.0;
+        }
 
-            for (size_t i = 0; i < mesh().nv(); i++)
-            {
-                double mean_curvature = 0;
-
-                Mat3d second_fundamental_form = Mat3d::Zero();
-                int counter = 0;
-                double vertex_area = 0;
-                for (size_t j = 0; j < mesh().m_vertex_to_edge_map[i].size(); j++)
-                {
-                    size_t e = mesh().m_vertex_to_edge_map[i][j];
-                    bool incident_to_region = false;
-                    for (size_t k = 0; k < mesh().m_edge_to_triangle_map[e].size(); k++)
-                    {
-                        const LosTopos::Vec2i& l =
-                          mesh().get_triangle_label(mesh().m_edge_to_triangle_map[e][k]);
-                        if (l[0] == region || l[1] == region)
-                        {
-                            incident_to_region = true;
-                            break;
-                        }
-                    }
-
-                    if (incident_to_region)
-                    {
-                        Vec3d et =
-                          (pos(mesh().m_edges[e][1]) - pos(mesh().m_edges[e][0])).normalized();
-                        second_fundamental_form += et * et.transpose() * curvature[e][region];
-                        mean_curvature += curvature[e][region];
-                        counter++;
-                    }
-                }
-
-                for (size_t j = 0; j < mesh().m_vertex_to_triangle_map[i].size(); j++)
-                {
-                    const LosTopos::Vec3st& t =
-                      mesh().m_tris[mesh().m_vertex_to_triangle_map[i][j]];
-                    const LosTopos::Vec2i& l =
-                      mesh().get_triangle_label(mesh().m_vertex_to_triangle_map[i][j]);
-                    if (l[0] == region || l[1] == region)
-                    {
-                        Vec3d x0 = pos(t[0]);
-                        Vec3d x1 = pos(t[1]);
-                        Vec3d x2 = pos(t[2]);
-                        double area = (x1 - x0).cross(x2 - x0).norm() / 2;
-                        vertex_area += area / 3;
-                    }
-                }
-
-                //                if (counter == 0)
-                //                    mean_curvature = 0;
-                //                else
-                ////                    mean_curvature = second_fundamental_form.trace() / counter /
-                /// 3;
-                //                    mean_curvature /= counter;
-
-                mean_curvature = mean_curvature / (vertex_area * 2);
-
-                m_dbg_v1[i][region] = mean_curvature;
-            }
+        if (incident_region.size() > 0)
+        {
+            avg_vertex_areas[vertex_index] = vertex_area / (double)incident_region.size();
         }
     }
+
+    for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
+    {
+        for (int incident_region : getVertexIncidentRegions(vertex_index))
+        {
+            double mean_curvature = 0;
+
+            Mat3d second_fundamental_form = Mat3d::Zero();
+            int counter = 0;
+
+#ifdef FANGS_VERSION
+            double vertex_area = 0;
+            double triple_junction_length_sum = 0;
+#else
+            double vertex_area = avg_vertex_areas[vertex_index];
+#endif
+            for (size_t edge_index : mesh().m_vertex_to_edge_map[vertex_index])
+            {
+                // Skip if the edge is not incident to the current region
+                if (curvature[edge_index].find(incident_region) == curvature[edge_index].end())
+                {
+                    continue;
+                }
+
+                Vec3d et = getEdgeTangent(edge_index);
+                second_fundamental_form += et * et.transpose() * curvature[edge_index][incident_region];
+                mean_curvature += curvature[edge_index][incident_region];
+                counter++;
+#ifdef FANGS_VERSION
+                if (isEdgeTripleJunction(edge_index))
+                {
+                    triple_junction_length_sum += getEdgeLength(edge_index);
+                }
+#endif
+            }
+#ifdef FANGS_VERSION
+            vertex_area = getVertexAreaIncidentToRegion(region);
+#ifdef FANGS_PATCHED
+            if (isEdgeTripleJunction(edge_index)) // if the vertex is a triple junction, its domain should then be smaller.
+            {
+                vertex_area = triple_junction_length_sum * m_delta * 1.0;
+            }
+#endif
+#endif
+
+            if (vertex_area == 0)
+                mean_curvature = 0;
+            else
+                mean_curvature = mean_curvature / (vertex_area * 2);
+
+            result[vertex_index][incident_region] = mean_curvature;
+        }
+    }
+
+    return result;
+}
+
+std::vector<std::map<int, double>> VS3D::getEdgeAlignedCurvatures() const
+{
+    std::vector<std::map<int, double>> result(mesh().ne());
+    for (size_t edge_index : boost::irange(0lu, mesh().ne()))
+    {
+        // map from region to faces incident to edge i with the label of interest (assume there
+        // are only two of them for now; this can be false only when complex collision prevents
+        // immediate T1 resolution, which is not expected to happen for bubble complexes.)
+        std::map<int, std::vector<size_t>> region_to_incident_triangles;
+        for (size_t triangle_index : mesh().m_edge_to_triangle_map[edge_index])
+        {
+            const LosTopos::Vec2i& l = mesh().get_triangle_label(triangle_index);
+            for (int incident_region : { l[0], l[1] })
+            {
+                region_to_incident_triangles[incident_region].push_back(triangle_index);
+            }
+        }
+
+        for (auto& [region, incident_faces] : region_to_incident_triangles)
+        {
+            if (incident_faces.size() == 0)
+                continue;
+            if (incident_faces.size() != 2)
+            {
+                result[edge_index][region] = 0;
+                continue;
+            }
+
+            int v0 = mesh().m_edges[edge_index][0];
+            int v1 = mesh().m_edges[edge_index][1];
+            Vec3d x0 = pos(v0);
+            Vec3d x1 = pos(v1);
+            Vec3d et = (x1 - x0);
+
+            int ti0 = incident_faces[0];
+            int ti1 = incident_faces[1];
+            LosTopos::Vec3st t0 = mesh().get_triangle(ti0);
+            LosTopos::Vec3st t1 = mesh().get_triangle(ti1);
+
+            if (mesh().get_triangle_label(ti0)[mesh().oriented(v0, v1, t0) ? 1 : 0] == region)
+            {
+                std::swap(ti0, ti1);
+                std::swap(t0, t1); // the region of interest should be to the CCW direction of
+                                   // t0 when looking along the direciton of edge i
+            }
+
+            assert(mesh().get_triangle_label(ti0)[mesh().oriented(v0, v1, t0) ? 0 : 1] == region);
+            assert(mesh().get_triangle_label(ti1)[mesh().oriented(v0, v1, t1) ? 1 : 0] == region);
+
+            Vec3d n0 = getTriangleNormalAwayFromRegion(ti0, region);
+            Vec3d n1 = getTriangleNormalAwayFromRegion(ti1, region);
+
+            double edgeArea = (n0.norm() + n1.norm()) / 2 / 3;
+            n0.normalize();
+            n1.normalize();
+
+            double curvature_i = angleAroundAxis(n0, n1, et) * et.norm();
+
+            result[edge_index][region] = curvature_i;
+        }
+    }
+
+    return result;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
