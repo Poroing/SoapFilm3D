@@ -10,6 +10,8 @@
 #include "VS3D.h"
 #include "BiotSavart.h"
 
+#include "fmmtl/fmmtl/util/Clock.hpp"
+
 namespace
 {
 double
@@ -38,6 +40,7 @@ angleAroundAxis(const Vec3d& v0,
 void
 VS3D::step_explicit(double dt)
 {
+    Clock circulation_time_stepping_duration;
     std::cout << "Explicit time stepping" << std::endl;
     m_dbg_t1.clear();
     m_dbg_t2.clear();
@@ -290,6 +293,8 @@ VS3D::step_explicit(double dt)
             (*m_Gamma)[i].set(rp, (*m_Gamma)[i].get(rp) + simOptions().sigma * mean_curvature * dt);
         }
     }
+
+    std::cout << "CirculationTimeSteppingExecutionTime " << circulation_time_stepping_duration.seconds() << std::endl;
 
     // Biot-Savart integral based on vortex sheet strength gamma: Stock 2006, Eq. 2.26
     VecXd v;
