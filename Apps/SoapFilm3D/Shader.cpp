@@ -195,7 +195,7 @@ void Shader::printProgramInfoLog(GLuint prog, const std::string & name, const st
         GLchar * infoLog = new GLchar[infologLength];
         glGetProgramInfoLog(prog, infologLength, &charsWritten, infoLog);
         std::cerr << "Shader " << name << " at " << stage << ": " << std::endl << infoLog << std::endl;
-        delete infoLog;
+        delete[] infoLog;
     }
 }
 
@@ -208,7 +208,7 @@ void Shader::printShaderInfoLog(GLuint shader, const std::string & name, const s
         GLchar * infoLog = new GLchar[infologLength];
         glGetShaderInfoLog(shader, infologLength, &charsWritten, infoLog);
         std::cerr << "Shader " << name << " at " << stage << ": " << std::endl << infoLog << std::endl;
-        delete infoLog;
+        delete[] infoLog;
     }
 }
 

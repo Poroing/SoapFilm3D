@@ -5,6 +5,9 @@
 #include <boost/range/algorithm/sort.hpp>
 #include <boost/range/algorithm/unique.hpp>
 #include <random>
+#include <boost/range/irange.hpp>
+#include "fmmtl/fmmtl/util/Clock.hpp"
+
 
 double
 getRelativeDistance(const VecXd& a, const VecXd& b)
@@ -58,31 +61,38 @@ main()
           generate_charge_component(), generate_charge_component(), generate_charge_component());
     };
 
-    std::vector<Vec3d> sources(number_sources_distribution(random_engine));
-    boost::generate(sources, generate_position);
-    boost::sort(sources, compare);
-    boost::erase(sources, boost::unique<boost::return_found_end>(sources));
+    for (size_t number_sources : boost::irange(1lu, 20lu))
+    {
+        std::vector<Vec3d> sources(50000);
+        boost::generate(sources, generate_position);
+        boost::sort(sources, compare);
+        boost::erase(sources, boost::unique<boost::return_found_end>(sources));
 
-    std::vector<Vec3d> charges(sources.size());
-    boost::generate(charges, generate_charges);
+        std::vector<Vec3d> charges(sources.size());
+        boost::generate(charges, generate_charges);
 
-    std::vector<Vec3d> targets(number_targets_distribution(random_engine));
-    boost::generate(targets, generate_position);
+        std::vector<Vec3d> targets(static_cast<size_t>(std::pow(2, number_sources)));
+        boost::generate(targets, generate_position);
+        
+        Clock computation_time;
+        VecXd fast_winding_result = BiotSavart_fast_winding_number(sources, targets, charges, 0.01);
+        std::cout << "ComputionTime "  << computation_time.seconds() << std::endl;
+    }
 
-    double delta = 0.01;
 
-    VecXd naive_result = BiotSavart_naive(sources, targets, charges, delta);
-    VecXd fmmtl_result = BiotSavart_fmmtl(sources, targets, charges, delta);
+    //double delta = 0.01;
 
-    Options::addDoubleOption("winding-beta", 2.);
-    Options::addIntegerOption("winding-expansion-order", 2);
-    VecXd fast_winding_result = BiotSavart_fast_winding_number(sources, targets, charges, delta);
+    //VecXd naive_result = BiotSavart_naive(sources, targets, charges, delta);
+    //VecXd fmmtl_result = BiotSavart_fmmtl(sources, targets, charges, delta);
 
-    std::cout << "Naive -- Fmmtl: " << getRelativeDistance(naive_result, fmmtl_result) << std::endl;
-    std::cout << "Fmmtl -- Fast Winding: " << getRelativeDistance(fast_winding_result, fmmtl_result)
-              << std::endl;
-    std::cout << "Fast Winding -- Naive: " << getRelativeDistance(naive_result, fast_winding_result)
-              << std::endl;
+    //Options::addDoubleOption("winding-beta", 4.);
+    //Options::addIntegerOption("winding-expansion-order", 2);
+
+    //std::cout << "Naive -- Fmmtl: " << getRelativeDistance(naive_result, fmmtl_result) << std::endl;
+    //std::cout << "Fmmtl -- Fast Winding: " << getRelativeDistance(fast_winding_result, fmmtl_result)
+    //          << std::endl;
+    //std::cout << "Fast Winding -- Naive: " << getRelativeDistance(naive_result, fast_winding_result)
+    //          << std::endl;
 
     return 0;
 }

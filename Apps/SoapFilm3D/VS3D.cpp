@@ -1913,6 +1913,8 @@ VS3D::post_collapse(const LosTopos::SurfTrack& st, size_t e, size_t merged_verte
         }
     }
     (*m_Gamma)[merged_vertex] = newGamma;
+
+    delete td;
 }
 
 struct SplitTempData
@@ -2042,6 +2044,8 @@ VS3D::post_split(const LosTopos::SurfTrack& st, size_t e, size_t new_vertex, voi
         }
     }
     (*m_Gamma)[new_vertex] = newGamma;
+
+    delete td;
 }
 
 void
@@ -2112,6 +2116,8 @@ VS3D::post_t1(const LosTopos::SurfTrack& st, size_t v, size_t a, size_t b, void*
             std::cout << "Gammas: " << std::endl << Gamma(previously_adjacent_vertex) << std::endl;
         }
     }
+
+    delete td;
 }
 
 struct FaceSplitTempData
@@ -2147,6 +2153,8 @@ VS3D::post_facesplit(const LosTopos::SurfTrack& st, size_t f, size_t new_vertex,
                 + Gamma(td->v2).get(region_pair))
                  / 3);
     }
+
+    delete td;
 }
 
 struct SnapTempData
@@ -2264,6 +2272,8 @@ VS3D::post_snap(const LosTopos::SurfTrack& st, size_t v_kept, size_t v_deleted, 
         std::cout << "new Gamma = " << newGamma << std::endl;
     }
     Gamma(v_kept) = newGamma;
+
+    delete td;
 }
 
 void

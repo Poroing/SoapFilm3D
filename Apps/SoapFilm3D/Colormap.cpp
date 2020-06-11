@@ -521,9 +521,9 @@ void Colormap::generateMatlabBone()
 		m_g[i] = accm_g[i]/8.0;
 		m_b[i] = accm_b[i]/8.0;
 	}
-	delete accm_r;
-	delete accm_g;
-	delete accm_b;
+	delete[] accm_r;
+	delete[] accm_g;
+	delete[] accm_b;
 }
 
 void Colormap::generateMatlabCopper()
@@ -570,9 +570,9 @@ void Colormap::generateMatlabPink()
 		m_g[i] = sqrt(m_g[i]);
 		m_b[i] = sqrt(m_b[i]);
 	}
-	delete accm_r;
-	delete accm_g;
-	delete accm_b;
+	delete[] accm_r;
+	delete[] accm_g;
+	delete[] accm_b;
 }
 
 std::ostream& operator<<( std::ostream& os, Colormap& rhs )
