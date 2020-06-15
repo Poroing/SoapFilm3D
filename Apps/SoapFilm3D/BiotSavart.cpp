@@ -98,7 +98,8 @@ BiotSavart_fmmtl(const std::vector<Vec3d>& sources,
     // Build the FMM
     fmmtl::kernel_matrix<kernel_type> A = K(fmmtl_targets, fmmtl_sources);
     FMMOptions opts;
-    opts.theta = Options::boolValue("fmmtl-theta");
+    opts.theta = Options::doubleValue("fmmtl-theta");
+    opts.ncrit = Options::intValue("fmmtl-minimum-cell-size");
     A.set_options(opts);
 
     // Execute the FMM

@@ -75,6 +75,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addIntegerOption("winding-expansion-order", 2);
     Options::addDoubleOption("fmmtl-theta", .5);
     Options::addIntegerOption("fmmtl-expansion-order", 5);
+    Options::addIntegerOption("fmmtl-minimum-cell-size", 128);
     Options::addBooleanOption("looped", true);
     Options::addDoubleOption("radius", 5e-5);
     Options::addDoubleOption("density", 1.32e3);
