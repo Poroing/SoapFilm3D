@@ -71,8 +71,10 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("sigma", 1.0);
     Options::addDoubleOption("gravity", 0.0);
     Options::addStringOption("fast-summation" , "fmmtl");
-    Options::addDoubleOption("winding-beta", 2.);
+    Options::addDoubleOption("winding-beta", 4.);
     Options::addIntegerOption("winding-expansion-order", 2);
+    Options::addDoubleOption("fmmtl-theta", .5);
+    Options::addIntegerOption("fmmtl-expansion-order", 5);
     Options::addBooleanOption("looped", true);
     Options::addDoubleOption("radius", 5e-5);
     Options::addDoubleOption("density", 1.32e3);

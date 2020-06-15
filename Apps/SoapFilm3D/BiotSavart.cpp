@@ -10,6 +10,9 @@
 #endif
 
 #include <boost/range/algorithm/transform.hpp>
+#include <boost/range/algorithm/unique.hpp>
+#include <boost/range/algorithm/sort.hpp>
+#include <boost/range/algorithm_ext/erase.hpp>
 
 #include "BiotSavart.h"
 
@@ -63,7 +66,7 @@ BiotSavart_fmmtl(const std::vector<Vec3d>& sources,
     typedef RMSpherical kernel_type;
 
     // Init kernel
-    kernel_type K(delta);
+    kernel_type K(delta, Options::intValue("fmmtl-expansion-order"));
 
     typedef kernel_type::point_type point_type;
     typedef kernel_type::source_type source_type;
@@ -94,7 +97,8 @@ BiotSavart_fmmtl(const std::vector<Vec3d>& sources,
 
     // Build the FMM
     fmmtl::kernel_matrix<kernel_type> A = K(fmmtl_targets, fmmtl_sources);
-    FMMOptions opts = get_options(0, NULL);
+    FMMOptions opts;
+    opts.theta = Options::boolValue("fmmtl-theta");
     A.set_options(opts);
 
     // Execute the FMM
@@ -192,6 +196,7 @@ BiotSavart(VS3D& vs, const VecXd& dx)
             charges[triangle_index] = vs.getTranslatedTriangleSheetStrength(triangle_index, dx);
         }
     }
+
 
     // open boundary extra face contributions
     if (vs.m_obefv.size() == vs.m_obefe.size() && vs.m_obefv.size() == vs.m_obefc.size())
