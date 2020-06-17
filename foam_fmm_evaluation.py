@@ -1,4 +1,4 @@
-#!/usr/bin/python3.8
+#!python3.8
 
 import pathlib
 import subprocess
@@ -10,6 +10,7 @@ import functools
 import time
 import collections
 import os
+import collections.abc
 
 class FailedSimulation(Exception):
 
@@ -160,6 +161,7 @@ class SoapFilmSimulation(object):
         environment_variable.update(os.environ)
         if self.profile:
             environment_variable['CPUPROFILE'] = str(self.output_directory / 'prof.out')
+            environment_variable['OMP_NUM_THREADS'] = str(1)
         while True:
             print(f'Try {number_tries}')
             completed_process = subprocess.run(
@@ -352,7 +354,10 @@ if  __name__ == '__main__':
     simulation_parameter_product = SimulationParameterProduct(args.directory_order)
     for sim_option in args.sim_option:
         key, values = sim_option.split('=')
-        values = values.split(',')
+        if values.startswith('E:'):
+            values = list(eval(values[2:]))
+        else:
+            values = values.split(',')
         simulation_parameter_product.addOptions(key, values)
 
     end_time = None
