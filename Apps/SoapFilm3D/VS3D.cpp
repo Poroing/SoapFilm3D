@@ -170,7 +170,7 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
         (*m_Gamma)[i] = GammaType(m_nregion);
 
     // Biot-Savart kernel regularization parameter
-    m_delta = max_edge_len * 0.5;
+    m_delta = max_edge_len * Options::doubleValue("regularization-coefficient");
 }
 
 VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,

@@ -82,6 +82,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("stretching", 5000.0);
     Options::addDoubleOption("bending", 250.0);
     Options::addStringOption("smoothing-type", "laplacian");
+    Options::addDoubleOption("regularization-coefficient", 0.5);
 
     Options::addBooleanOption("print-t1-info", false);
     Options::addBooleanOption("print-snap-info", false);
