@@ -2388,7 +2388,7 @@ Scenes::sceneNewFoam(Sim* sim,
 {
     int M = Options::intValue("mesh-size-m"); // number of bubbles
     double bubble_radius = 1.;
-    double cube_size = bubble_radius * (std::cbrt(M) / 0.56);
+    double cube_size = bubble_radius * (std::cbrt(M) * std::log2(2. + (double)M / 128. ) / 0.56);
     std::vector<std::pair<Vec3d, double>> spheres =
       getRandomNonIntersectingSpheres(std::uniform_real_distribution(bubble_radius, bubble_radius),
                                       std::uniform_real_distribution(0., cube_size),
