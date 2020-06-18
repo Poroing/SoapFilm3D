@@ -186,7 +186,10 @@ BiotSavart(VS3D& vs, const VecXd& dx)
         for (size_t triangle_index = 0; triangle_index < vs.mesh().nt(); ++triangle_index)
         {
             if (vs.surfTrack()->triangle_is_all_solid(triangle_index))
+            {
+                sources_and_charges[triangle_index] = std::make_pair(Vec3d::Zero(), Vec3d::Zero());
                 continue; // all-solid faces don't contribute vorticity.
+            }
 
             sources_and_charges[triangle_index] =
               std::make_pair(vs.getTranslatedTriangleCenter(triangle_index, dx),
@@ -204,6 +207,10 @@ BiotSavart(VS3D& vs, const VecXd& dx)
                                              vs.m_obefc[open_boundary_face_index]);
         }
     }
+
+    // Erase the duplicate sources to avoid an infinite loop in the octree building of the
+    // fast winding number method.
+    erase_duplicate_sources(sources_and_charges);
 
     VecXd result;
 
@@ -232,8 +239,9 @@ BiotSavart(VS3D& vs, const VecXd& dx)
     return result;
 }
 
-void erase_duplicate_sources(std::vector<std::pair<Vec3d, Vec3d>>& sources_and_charges) {
-
+void
+erase_duplicate_sources(std::vector<std::pair<Vec3d, Vec3d>>& sources_and_charges)
+{
 
     // Remove duplicate sources to avoid infinite loops in winding number algorithm
     boost::sort(sources_and_charges,
@@ -243,7 +251,7 @@ void erase_duplicate_sources(std::vector<std::pair<Vec3d, Vec3d>>& sources_and_c
                     {
                         return true;
                     }
-                    if (compare(lhs.first, rhs.first))
+                    if (compare(rhs.first, lhs.first))
                     {
                         return false;
                     }
@@ -254,10 +262,11 @@ void erase_duplicate_sources(std::vector<std::pair<Vec3d, Vec3d>>& sources_and_c
                     return false;
                 });
 
-    boost::erase(sources_and_charges,
-                 boost::unique<boost::return_found_end>(
-                   sources_and_charges,
-                   [](const std::pair<Vec3d, Vec3d>& lhs, const std::pair<Vec3d, Vec3d>& rhs) {
-                       return lhs.first == rhs.first;
-                   }));
+    sources_and_charges.erase(
+      boost::unique<boost::return_found>(
+        sources_and_charges,
+        [](const std::pair<Vec3d, Vec3d>& lhs, const std::pair<Vec3d, Vec3d>& rhs) {
+            return lhs.first == rhs.first;
+        }),
+      sources_and_charges.end());
 }
