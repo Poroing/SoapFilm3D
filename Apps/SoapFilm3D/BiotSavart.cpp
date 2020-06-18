@@ -1,6 +1,6 @@
-#include "fmmtl/fmmtl/util/Clock.hpp"
-#include "fast_winding_number_biot_savart.h"
 #include "SimOptions.h"
+#include "fast_winding_number_biot_savart.h"
+#include "fmmtl/fmmtl/util/Clock.hpp"
 
 #ifndef WIN32
 #include "fmmtl/fmmtl/Direct.hpp"
@@ -9,20 +9,20 @@
 #include "fmmtl/kernel/RMSpherical.hpp"
 #endif
 
+#include <boost/range/algorithm/sort.hpp>
 #include <boost/range/algorithm/transform.hpp>
 #include <boost/range/algorithm/unique.hpp>
-#include <boost/range/algorithm/sort.hpp>
 #include <boost/range/algorithm_ext/erase.hpp>
+#include <boost/range/combine.hpp>
+#include <boost/tuple/tuple_comparison.hpp>
 
 #include "BiotSavart.h"
 
 VecXd
-BiotSavart_naive(const std::vector<Vec3d>& sources,
+BiotSavart_naive(const std::vector<std::pair<Vec3d, Vec3d>>& sources_and_charges,
                  const std::vector<Vec3d>& targets,
-                 const std::vector<Vec3d>& charges,
                  double delta)
 {
-    assert(charges.size() == sources.size());
     VecXd vel = VecXd::Zero(targets.size() * 3);
 #pragma omp parallel
     {
@@ -32,15 +32,15 @@ BiotSavart_naive(const std::vector<Vec3d>& sources,
             Vec3d v(0, 0, 0);
             const Vec3d& target = targets[target_index];
 
-            for (size_t source_index : boost::irange(0lu, sources.size()))
+            for (size_t source_index : boost::irange(0lu, sources_and_charges.size()))
             {
 
-                const Vec3d& source = sources[source_index];
+                const Vec3d& source = sources_and_charges[source_index].first;
 
                 Vec3d dx = target - source;
                 double dxn = sqrt(dx.squaredNorm() + delta * delta);
 
-                v += charges[source_index].cross(dx) / (dxn * dxn * dxn);
+                v += sources_and_charges[source_index].second.cross(dx) / (dxn * dxn * dxn);
             }
 
             v /= (4 * M_PI);
@@ -53,12 +53,10 @@ BiotSavart_naive(const std::vector<Vec3d>& sources,
 
 #ifndef WIN32
 VecXd
-BiotSavart_fmmtl(const std::vector<Vec3d>& sources,
+BiotSavart_fmmtl(const std::vector<std::pair<Vec3d, Vec3d>>& sources_and_charges,
                  const std::vector<Vec3d>& targets,
-                 const std::vector<Vec3d>& charges,
                  double delta)
 {
-    assert(charges.size() == sources.size());
     // code adapted from FMMTL example test "error_biot.cpp"
 
     // Init the FMM Kernel and options
@@ -75,9 +73,9 @@ BiotSavart_fmmtl(const std::vector<Vec3d>& sources,
     typedef kernel_type::result_type result_type;
 
     // Init points and charges
-    std::vector<source_type> fmmtl_sources(sources.size());
+    std::vector<source_type> fmmtl_sources(sources_and_charges.size());
     std::vector<target_type> fmmtl_targets(targets.size());
-    std::vector<charge_type> fmmtl_charges(charges.size());
+    std::vector<charge_type> fmmtl_charges(sources_and_charges.size());
 
     auto convert_to_fmmtl = [](const Vec3d& v) { return Vec<3, double>(v[0], v[1], v[2]); };
 #pragma omp parallel
@@ -88,10 +86,11 @@ BiotSavart_fmmtl(const std::vector<Vec3d>& sources,
             fmmtl_targets[target_index] = convert_to_fmmtl(targets[target_index]);
         }
 
-        for (size_t source_index = 0; source_index < sources.size(); ++source_index)
+        for (size_t source_index = 0; source_index < sources_and_charges.size(); ++source_index)
         {
-            fmmtl_sources[source_index] = convert_to_fmmtl(sources[source_index]);
-            fmmtl_charges[source_index] = convert_to_fmmtl(charges[source_index]);
+            fmmtl_sources[source_index] = convert_to_fmmtl(sources_and_charges[source_index].first);
+            fmmtl_charges[source_index] =
+              convert_to_fmmtl(sources_and_charges[source_index].second);
         }
     }
 
@@ -120,15 +119,13 @@ BiotSavart_fmmtl(const std::vector<Vec3d>& sources,
 #endif
 
 VecXd
-BiotSavart_fast_winding_number(const std::vector<Vec3d>& sources,
-                 const std::vector<Vec3d>& targets,
-                 const std::vector<Vec3d>& charges,
-                 double delta)
+BiotSavart_fast_winding_number(const std::vector<std::pair<Vec3d, Vec3d>>& sources_and_charges,
+                               const std::vector<Vec3d>& targets,
+                               double delta)
 {
-    assert(charges.size() == sources.size());
 
-    Eigen::MatrixX3d libigl_sources(Eigen::MatrixX3d::Zero(sources.size(), 3));
-    Eigen::MatrixX3d libigl_charges(Eigen::MatrixX3d::Zero(charges.size(), 3));
+    Eigen::MatrixX3d libigl_sources(Eigen::MatrixX3d::Zero(sources_and_charges.size(), 3));
+    Eigen::MatrixX3d libigl_charges(Eigen::MatrixX3d::Zero(sources_and_charges.size(), 3));
     Eigen::MatrixX3d libigl_targets(Eigen::MatrixX3d::Zero(targets.size(), 3));
 
 #pragma omp parallel
@@ -139,10 +136,10 @@ BiotSavart_fast_winding_number(const std::vector<Vec3d>& sources,
             libigl_targets.row(target_index) = targets[target_index];
         }
 
-        for (size_t source_index = 0; source_index < sources.size(); ++source_index)
+        for (size_t source_index = 0; source_index < sources_and_charges.size(); ++source_index)
         {
-            libigl_sources.row(source_index) = sources[source_index];
-            libigl_charges.row(source_index) = charges[source_index];
+            libigl_sources.row(source_index) = sources_and_charges[source_index].first;
+            libigl_charges.row(source_index) = sources_and_charges[source_index].second;
         }
     }
 
@@ -172,12 +169,10 @@ BiotSavart(VS3D& vs, const VecXd& dx)
     std::cout << "BoundingBoxVolume " << vs.getBoundingBoxVolume() << std::endl;
     std::cout << "NumberFaces " << vs.mesh().nt() << std::endl;
 
-
     Clock biot_savart_duration;
     // Init points and charges
-    std::vector<Vec3d> sources(vs.mesh().nt());
     std::vector<Vec3d> targets(vs.mesh().nv());
-    std::vector<Vec3d> charges(vs.mesh().nt());
+    std::vector<std::pair<Vec3d, Vec3d>> sources_and_charges(vs.mesh().nt());
 
 #pragma omp parallel
     {
@@ -193,20 +188,20 @@ BiotSavart(VS3D& vs, const VecXd& dx)
             if (vs.surfTrack()->triangle_is_all_solid(triangle_index))
                 continue; // all-solid faces don't contribute vorticity.
 
-            sources[triangle_index] = vs.getTranslatedTriangleCenter(triangle_index, dx);
-            charges[triangle_index] = vs.getTranslatedTriangleSheetStrength(triangle_index, dx);
+            sources_and_charges[triangle_index] =
+              std::make_pair(vs.getTranslatedTriangleCenter(triangle_index, dx),
+                             vs.getTranslatedTriangleSheetStrength(triangle_index, dx));
         }
     }
-
 
     // open boundary extra face contributions
     if (vs.m_obefv.size() == vs.m_obefe.size() && vs.m_obefv.size() == vs.m_obefc.size())
     {
         for (size_t open_boundary_face_index : boost::irange(0lu, vs.m_obefv.size()))
         {
-            charges.push_back(vs.m_obefe[open_boundary_face_index]
-                              * vs.m_obefv[open_boundary_face_index]);
-            sources.push_back(vs.m_obefc[open_boundary_face_index]);
+            sources_and_charges.emplace_back(vs.m_obefe[open_boundary_face_index]
+                                               * vs.m_obefv[open_boundary_face_index],
+                                             vs.m_obefc[open_boundary_face_index]);
         }
     }
 
@@ -215,23 +210,54 @@ BiotSavart(VS3D& vs, const VecXd& dx)
 #ifndef WIN32
     if (Options::strValue("fast-summation") == "fmmtl")
     {
-        result = BiotSavart_fmmtl(sources, targets, charges, vs.delta());
+        result = BiotSavart_fmmtl(sources_and_charges, targets, vs.delta());
     }
     else
 #endif
       if (Options::strValue("fast-summation") == "naive")
     {
-        result = BiotSavart_naive(sources, targets, charges, vs.delta());
+        result = BiotSavart_naive(sources_and_charges, targets, vs.delta());
     }
     else if (Options::strValue("fast-summation") == "winding")
     {
-        result = BiotSavart_fast_winding_number(sources, targets, charges, vs.delta());
+        result = BiotSavart_fast_winding_number(sources_and_charges, targets, vs.delta());
     }
-    else {
+    else
+    {
         throw std::runtime_error("Non Implemented Fast Summation Method");
     }
 
     std::cout << "BiotSavartExecution " << biot_savart_duration.seconds() << std::endl;
 
     return result;
+}
+
+void erase_duplicate_sources(std::vector<std::pair<Vec3d, Vec3d>>& sources_and_charges) {
+
+
+    // Remove duplicate sources to avoid infinite loops in winding number algorithm
+    boost::sort(sources_and_charges,
+                [](const std::pair<Vec3d, Vec3d>& lhs, const std::pair<Vec3d, Vec3d>& rhs) {
+                    MatrixComp<Vec3d> compare;
+                    if (compare(lhs.first, rhs.first))
+                    {
+                        return true;
+                    }
+                    if (compare(lhs.first, rhs.first))
+                    {
+                        return false;
+                    }
+                    if (compare(lhs.second, rhs.second))
+                    {
+                        return true;
+                    }
+                    return false;
+                });
+
+    boost::erase(sources_and_charges,
+                 boost::unique<boost::return_found_end>(
+                   sources_and_charges,
+                   [](const std::pair<Vec3d, Vec3d>& lhs, const std::pair<Vec3d, Vec3d>& rhs) {
+                       return lhs.first == rhs.first;
+                   }));
 }
