@@ -9,10 +9,12 @@
 #ifndef MultiTracker_eigenheaders_h
 #define MultiTracker_eigenheaders_h
 
+#include "surftrack.h"
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
-#include "surftrack.h"
+
+#include <boost/range/irange.hpp>
 
 typedef Eigen::Matrix<double, 4, 4> Mat4d;
 typedef Eigen::Matrix<double, 3, 3> Mat3d;
@@ -28,15 +30,44 @@ typedef Eigen::Matrix<int, Eigen::Dynamic, 3> MatXi;
 
 typedef Eigen::SparseMatrix<double> SparseMatd;
 
-Vec3i vc(const LosTopos::Vec3st & t);
-Vec2i vc(const LosTopos::Vec2i & l);
-Vec3d vc(const LosTopos::Vec3d & v);
-LosTopos::Vec3d vc(const Vec3d & v);
+Vec3i
+vc(const LosTopos::Vec3st& t);
+Vec2i
+vc(const LosTopos::Vec2i& l);
+Vec3d
+vc(const LosTopos::Vec3d& v);
+LosTopos::Vec3d
+vc(const Vec3d& v);
 
-class Vec2iComp
+template<typename Derived>
+class MatrixComp
 {
-public:
-    bool operator () (const Vec2i & v1, const Vec2i & v2) const { return v1[0] < v2[0] || (v1[0] == v2[0] && v1[1] < v2[1]); }
+  public:
+    bool operator()(const Eigen::PlainObjectBase<Derived>& lhs,
+                    const Eigen::PlainObjectBase<Derived>& rhs) const
+    {
+        assert(lhs.cols() == rhs.cols());
+        assert(lhs.rows() == rhs.rows());
+
+        for (size_t col : boost::irange((typename Derived::Index)0, lhs.cols()))
+        {
+            for (size_t row : boost::irange((typename Derived::Index)0, rhs.rows()))
+            {
+                if (lhs(row, col) < rhs(row, col))
+                {
+                    return true;
+                }
+                if (lhs(row, col) > rhs(row, col))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return false;
+    }
 };
+
+using Vec2iComp = MatrixComp<Vec2i>;
 
 #endif
