@@ -198,15 +198,15 @@ BiotSavart(VS3D& vs, const VecXd& dx)
     }
 
     // open boundary extra face contributions
-    if (vs.m_obefv.size() == vs.m_obefe.size() && vs.m_obefv.size() == vs.m_obefc.size())
-    {
-        for (size_t open_boundary_face_index : boost::irange(0lu, vs.m_obefv.size()))
-        {
-            sources_and_charges.emplace_back(vs.m_obefe[open_boundary_face_index]
-                                               * vs.m_obefv[open_boundary_face_index],
-                                             vs.m_obefc[open_boundary_face_index]);
-        }
-    }
+    //if (vs.m_obefv.size() == vs.m_obefe.size() && vs.m_obefv.size() == vs.m_obefc.size())
+    //{
+    //    for (size_t open_boundary_face_index : boost::irange(0lu, vs.m_obefv.size()))
+    //    {
+    //        sources_and_charges.emplace_back(vs.m_obefe[open_boundary_face_index]
+    //                                           * vs.m_obefv[open_boundary_face_index],
+    //                                         vs.m_obefc[open_boundary_face_index]);
+    //    }
+    //}
 
     // Erase the duplicate sources to avoid an infinite loop in the octree building of the
     // fast winding number method.

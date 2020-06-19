@@ -31,6 +31,38 @@ class OrderComp
     }
 };
 
+void cleanVertices(
+        std::vector<Vec3d>& vertices,
+        std::vector<Vec3i>& triangles,
+        std::vector<int>& mapping)
+{
+    mapping.resize(vertices.size(), -1);
+    std::vector<Vec3d> new_vertices;
+    int new_index = 0;
+    for (Vec3i& triangle : triangles)
+    {
+        for (size_t i : boost::irange((Vec3i::Index)0, triangle.size()))
+        {
+            if (mapping[triangle[i]] == -1)
+            {
+                mapping[triangle[i]] = new_index;
+                new_vertices.push_back(vertices[triangle[i]]);
+                ++new_index;
+            }
+            triangle[i] = mapping[triangle[i]];
+        }
+    }
+    vertices = new_vertices;
+}
+
+void cleanVertices(
+        std::vector<Vec3d>& vertices,
+        std::vector<Vec3i>& triangles)
+{
+    std::vector<int> mapping;
+    cleanVertices(vertices, triangles, mapping);
+}
+
 // subdivide every triangle in the mesh into four triangles, by introducing three new vertices at
 // edge midpoints after subdivision, vs will be expanded (retaining all original vertices), while fs
 // and ls will be replaced (no original faces remain) if r is positive, new vertices will be
@@ -320,10 +352,9 @@ isSphereIntersectingOtherSpheres(const Vec3d& center,
 
 // TODO: Is copying the distribution the best ?
 template<class RadiusDistribution, class CoordinateDistribution>
-std::enable_if_t<
-  std::is_same<typename RadiusDistribution::result_type,
-                 double>::value && std::is_same<typename CoordinateDistribution::result_type, double>::value,
-  std::vector<std::pair<Vec3d, double>>>
+std::enable_if_t<std::is_same<typename RadiusDistribution::result_type, double>::value
+                   && std::is_same<typename CoordinateDistribution::result_type, double>::value,
+                 std::vector<std::pair<Vec3d, double>>>
 getRandomSpheres(RadiusDistribution radius_distribution,
                  CoordinateDistribution coordinate_distribution,
                  std::size_t number_spheres,
@@ -357,10 +388,9 @@ getRandomSpheres(RadiusDistribution radius_distribution,
 
 // TODO: Is copying the distribution the best ?
 template<class RadiusDistribution, class CoordinateDistribution>
-std::enable_if_t<
-  std::is_same<typename RadiusDistribution::result_type,
-                 double>::value && std::is_same<typename CoordinateDistribution::result_type, double>::value,
-  std::vector<std::pair<Vec3d, double>>>
+std::enable_if_t<std::is_same<typename RadiusDistribution::result_type, double>::value
+                   && std::is_same<typename CoordinateDistribution::result_type, double>::value,
+                 std::vector<std::pair<Vec3d, double>>>
 getRandomNonIntersectingSpheres(RadiusDistribution radius_distribution,
                                 CoordinateDistribution coordinate_distribution,
                                 std::size_t number_spheres,
@@ -1875,23 +1905,7 @@ class MergedCubicBubblesFactory
 
     void cleanVertices()
     {
-        std::vector<int> mapping(m_vertices.size(), -1);
-        std::vector<Vec3d> new_vertices;
-        int new_index = 0;
-        for (Vec3i& triangle : m_triangles)
-        {
-            for (size_t i : boost::irange((Vec3i::Index)0, triangle.size()))
-            {
-                if (mapping[triangle[i]] == -1)
-                {
-                    mapping[triangle[i]] = new_index;
-                    new_vertices.push_back(m_vertices[triangle[i]]);
-                    ++new_index;
-                }
-                triangle[i] = mapping[triangle[i]];
-            }
-        }
-        m_vertices = new_vertices;
+        ::cleanVertices(m_vertices, m_triangles);
     }
 
     size_t getVertexIndex(size_t i, size_t j, size_t k) const
@@ -2388,7 +2402,7 @@ Scenes::sceneNewFoam(Sim* sim,
 {
     int M = Options::intValue("mesh-size-m"); // number of bubbles
     double bubble_radius = 1.;
-    double cube_size = bubble_radius * (std::cbrt(M) * std::log2(2. + (double)M / 128. ) / 0.56);
+    double cube_size = bubble_radius * (std::cbrt(M) * std::log2(2. + (double)M / 128.) / 0.56);
     std::vector<std::pair<Vec3d, double>> spheres =
       getRandomNonIntersectingSpheres(std::uniform_real_distribution(bubble_radius, bubble_radius),
                                       std::uniform_real_distribution(0., cube_size),
@@ -2466,6 +2480,107 @@ Scenes::scene2DBubbleLattice(Sim* sim,
     MergedCubicBubblesFactory factory(bubble_positions, bubble_size);
     factory.subdivide(number_subdivisions);
     factory.get(vs, fs, ls);
+    return new VS3D(vs, fs, ls, cv, cx);
+}
+
+VS3D*
+Scenes::sceneRoundStraws(Sim* sim,
+                         std::vector<LosTopos::Vec3d>& vs,
+                         std::vector<LosTopos::Vec3st>& fs,
+                         std::vector<LosTopos::Vec2i>& ls,
+                         std::vector<size_t>& cv,
+                         std::vector<Vec3d>& cx)
+{
+    size_t number_straws = Options::intValue("mesh-size-m");
+    size_t number_straw_side = Options::intValue("mesh-size-n");
+    size_t size_straw_lattice = static_cast<size_t>(std::ceil(std::sqrt(number_straws)));
+    double straw_radius = 1.0;
+    double gap_between_straws = 0.1 * straw_radius;
+
+    double straw_side_angle = 2 * M_PI / (double)number_straw_side;
+
+    std::vector<Vec3d> vertices;
+    std::vector<Vec3i> triangles;
+    std::vector<Vec2i> triangles_labels;
+
+    // Vertices
+    size_t straw_index = 0;
+    for (size_t i : boost::irange(0lu, size_straw_lattice))
+    {
+        for (size_t j : boost::irange(0lu, size_straw_lattice))
+        {
+            if (straw_index >= number_straws)
+            {
+                continue;
+            }
+
+            Vec3d straw_center = (straw_radius + gap_between_straws / 2.) * Vec3d(0, 1 + 2 * i, 1 + 2 * j);
+            vertices.push_back(straw_center);
+            vertices.push_back(straw_center + Vec3d(-straw_radius, 0, 0));
+
+            for (size_t side_index : boost::irange(0lu, number_straw_side))
+            {
+                vertices.push_back(straw_center + straw_radius * Vec3d(0, std::cos(side_index * straw_side_angle), std::sin(side_index * straw_side_angle)));
+            }
+
+            ++straw_index;
+        }
+    }
+
+    // Triangles
+    straw_index = 0;
+    for (size_t i : boost::irange(0lu, size_straw_lattice))
+    {
+        for (size_t j : boost::irange(0lu, size_straw_lattice))
+        {
+            if (straw_index >= number_straws)
+            {
+                continue;
+            }
+            size_t offset = straw_index *  (2 + number_straw_side);
+
+            for (size_t side_index : boost::irange(0lu, number_straw_side))
+            {
+                triangles.push_back(Vec3i(2 + side_index, 0, 2 + (side_index + 1) % number_straw_side) + offset * Vec3i::Ones());
+                triangles_labels.push_back(Vec2i(0, 1 + straw_index));
+                triangles.push_back(Vec3i(2 + side_index, 1, 2 + (side_index + 1) % number_straw_side) + offset * Vec3i::Ones());
+                triangles_labels.push_back(Vec2i(1 + straw_index, 0));
+            }
+
+            ++straw_index;
+        }
+    }
+
+    std::vector<int> mapping;
+    cleanVertices(vertices, triangles, mapping);
+
+    // Constraints
+    straw_index = 0;
+    for (size_t i : boost::irange(0lu, size_straw_lattice))
+    {
+        for (size_t j : boost::irange(0lu, size_straw_lattice))
+        {
+            if (straw_index >= number_straws)
+            {
+                continue;
+            }
+
+            size_t offset = straw_index *  (2 + number_straw_side);
+            cv.push_back(mapping[offset + 1]);
+            cx.push_back(vertices[cv.back()]);
+            for (size_t side_index : boost::irange(0lu, number_straw_side))
+            {
+                cv.push_back(mapping[offset + 2 + side_index]);
+                cx.push_back(vertices[cv.back()]);
+            }
+            ++straw_index;
+        }
+    }
+
+    convertToLosTopos(vertices, vs);
+    convertToLosTopos(triangles, fs);
+    convertToLosTopos(triangles_labels, ls);
+
     return new VS3D(vs, fs, ls, cv, cx);
 }
 
@@ -2848,5 +2963,12 @@ Scenes::stepNewFoam(double dt, Sim* sim, VS3D* vs)
 void
 Scenes::step2DBubbleLattice(double dt, Sim* sim, VS3D* vs)
 {
+}
+
+void
+Scenes::stepRoundStraws(double dt, Sim* sim, VS3D* vs)
+{
+    for (size_t i = 0; i < vs->m_constrained_vertices.size(); i++)
+        vs->m_constrained_positions[i] += Vec3d(-1, 0, 0) * dt;
 }
 

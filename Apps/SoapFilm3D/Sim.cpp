@@ -265,6 +265,9 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
         else if (m_scene == "2dbubblelattice")
             m_vs = Scenes::scene2DBubbleLattice(
               this, vertices, faces, face_labels, constrained_vertices, constrained_positions);
+        else if (m_scene == "roundstraws")
+            m_vs = Scenes::sceneRoundStraws(
+              this, vertices, faces, face_labels, constrained_vertices, constrained_positions);
 
         std::cout << "nv = " << vertices.size() << " nf = " << faces.size() << std::endl;
 
@@ -355,6 +358,8 @@ Sim::step()
         Scenes::stepNewFoam(m_dt, this, m_vs);
     else if (m_scene == "2dbubblelattice")
         Scenes::stepNewFoam(m_dt, this, m_vs);
+    else if (m_scene == "roundstraws")
+        Scenes::stepRoundStraws(m_dt, this, m_vs);
 
     // general time stepping
     double dt = m_vs->step(m_dt);
@@ -684,7 +689,7 @@ Sim::render(RenderMode rm, const Vec2d& mousepos, int selection_mask)
     for (size_t i = 0; i < m_vs->mesh().nv(); i++)
         vn[i].normalize();
 
-    if (false)
+    if (true)
     {
         glLineWidth(5);
         glBegin(GL_LINES);
