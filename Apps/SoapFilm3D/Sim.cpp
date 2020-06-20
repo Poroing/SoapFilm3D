@@ -309,7 +309,6 @@ void Sim::initFramesToSave()
     while (current_frame_number_begin < frames_to_save_option.size())
     {
         size_t current_frame_number_end = frames_to_save_option.find(":", current_frame_number_begin);
-        std::cout << "Substring: " << frames_to_save_option.substr(current_frame_number_begin, current_frame_number_end - current_frame_number_begin) << std::endl;
         m_frames_to_save.push_back(
                 std::stoi(frames_to_save_option.substr(current_frame_number_begin, current_frame_number_end)));
 
