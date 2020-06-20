@@ -72,7 +72,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("damping-coef", 1.0);
     Options::addDoubleOption("sigma", 1.0);
     Options::addDoubleOption("gravity", 0.0);
-    Options::addStringOption("fast-summation" , "fmmtl");
+    Options::addStringOption("fast-summation", "fmmtl");
     Options::addDoubleOption("winding-beta", 4.);
     Options::addIntegerOption("winding-expansion-order", 2);
     Options::addDoubleOption("fmmtl-theta", .5);
@@ -94,7 +94,8 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addIntegerOption("output-png-every-n-frames",
                               0); // 0 means synching with simulation frame rate (equivalent to 1).
     Options::addBooleanOption("output-mesh", false);
-    Options::addIntegerOption("output-mesh-every-n-frames", 0); // 0 means synching with simulation frame rate (equivalent to 1).
+    Options::addIntegerOption("output-mesh-every-n-frames",
+                              0); // 0 means synching with simulation frame rate (equivalent to 1).
     Options::addBooleanOption("output-obj", false);
     Options::addIntegerOption("output-obj-every-n-frames",
                               0); // 0 means synching with simulation frame rate (equivalent to 1).
@@ -103,7 +104,8 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("remeshing-resolution", 0.1);
     Options::addIntegerOption("remeshing-iterations", 1);
     Options::addIntegerOption("initial-remeshing-iterations", 1);
-    Options::addIntegerOption("maximum-consecutive-timestep-with-collisions", std::numeric_limits<int>::max());
+    Options::addIntegerOption("maximum-consecutive-timestep-with-collisions",
+                              std::numeric_limits<int>::max());
 
     Options::addIntegerOption("lostopos-maximum-timestep-cuts", std::numeric_limits<int>::max());
     Options::addDoubleOption("lostopos-collision-epsilon-fraction",
@@ -280,7 +282,6 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
         m_vs->improveMesh(Options::intValue("initial-remeshing-iterations"));
     }
 
-
     // prepare to start the simulation
     m_time = 0;
     m_dt = Options::doubleValue("time-step");
@@ -297,7 +298,8 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     return true;
 }
 
-void Sim::initFramesToSave()
+void
+Sim::initFramesToSave()
 {
     m_frames_to_save.clear();
     std::string frames_to_save_option = Options::strValue("frames-to-save");
@@ -308,9 +310,10 @@ void Sim::initFramesToSave()
     size_t current_frame_number_begin = 0;
     while (current_frame_number_begin < frames_to_save_option.size())
     {
-        size_t current_frame_number_end = frames_to_save_option.find(":", current_frame_number_begin);
-        m_frames_to_save.push_back(
-                std::stoi(frames_to_save_option.substr(current_frame_number_begin, current_frame_number_end)));
+        size_t current_frame_number_end =
+          frames_to_save_option.find(":", current_frame_number_begin);
+        m_frames_to_save.push_back(std::stoi(
+          frames_to_save_option.substr(current_frame_number_begin, current_frame_number_end)));
 
         if (current_frame_number_end == std::string::npos)
         {
@@ -449,10 +452,9 @@ Sim::stepOutput(bool headless)
 
         int meshfd = Options::intValue("output-mesh-every-n-frames");
         bool outputmesh = Options::boolValue("output-mesh");
-        if (
-                ((meshfd == 0 || frameid % meshfd == 0) && outputmesh)
-            ||  boost::find(m_frames_to_save, frameid) != m_frames_to_save.end()
-           )
+        if (outputmesh
+            && ((m_frames_to_save.empty() && (meshfd == 0 || frameid % meshfd == 0))
+                || (boost::find(m_frames_to_save, frameid) != m_frames_to_save.end())))
         {
             std::stringstream mesh_ss;
             mesh_ss << m_output_directory << "/mesh" << std::setfill('0') << std::setw(6) << frameid
@@ -461,10 +463,9 @@ Sim::stepOutput(bool headless)
         }
 
         int objfd = Options::intValue("output-obj-every-n-frames");
-        if (
-                (objfd == 0 || frameid % objfd == 0) && Options::boolValue("output-obj")
-                ||  boost::find(m_frames_to_save, frameid) != m_frames_to_save.end()
-            )
+        if (Options::boolValue("output-obj")
+            && ((m_frames_to_save.empty() && (objfd == 0 || frameid % objfd == 0))
+                || boost::find(m_frames_to_save, frameid) != m_frames_to_save.end()))
         {
             std::stringstream obj_ss;
             obj_ss << m_output_directory << "/mesh" << std::setfill('0') << std::setw(6) << frameid
@@ -484,7 +485,8 @@ Sim::stepOutput(bool headless)
  *  Loads the next frame. The increment in frame number is indicated by the option
  *  load-increment.
  */
-bool Sim::loadNextFrame()
+bool
+Sim::loadNextFrame()
 {
     return load(Options::intValue("load-increment"));
 }
@@ -1154,8 +1156,7 @@ Sim::showPrimitiveInfo()
     {
         std::cout << "Vertex of Interest: " << m_nearest_vertex << " ("
                   << m_vs->pos(m_nearest_vertex).transpose() << ")" << std::endl;
-        std::cout << "  circulation = " << std::endl
-                  << m_vs->Gamma(m_nearest_vertex) << std::endl;
+        std::cout << "  circulation = " << std::endl << m_vs->Gamma(m_nearest_vertex) << std::endl;
         if (m_vs->m_dbg_v1.size() == m_vs->mesh().nv())
         {
             std::cout << "  dbg v1 = ";
