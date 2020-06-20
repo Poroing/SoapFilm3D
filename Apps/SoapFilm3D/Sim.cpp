@@ -461,7 +461,10 @@ Sim::stepOutput(bool headless)
         }
 
         int objfd = Options::intValue("output-obj-every-n-frames");
-        if ((objfd == 0 || frameid % objfd == 0) && Options::boolValue("output-obj"))
+        if (
+                (objfd == 0 || frameid % objfd == 0) && Options::boolValue("output-obj")
+                ||  boost::find(m_frames_to_save, frameid) != m_frames_to_save.end()
+            )
         {
             std::stringstream obj_ss;
             obj_ss << m_output_directory << "/mesh" << std::setfill('0') << std::setw(6) << frameid
