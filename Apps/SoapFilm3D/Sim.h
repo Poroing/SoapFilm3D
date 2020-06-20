@@ -61,6 +61,8 @@ public:
     void showPrimitiveInfo();
     
 protected:
+    void initFramesToSave();
+
     bool m_verbose;
     
     std::string m_scene;
@@ -73,6 +75,7 @@ protected:
     double m_time;
     int m_frameid;
     bool m_finished;
+    std::vector<int> m_frames_to_save;
 
     int m_nearest_vertex;
     int m_nearest_edge;

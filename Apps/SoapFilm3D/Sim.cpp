@@ -40,6 +40,8 @@
 #include <GL/glut.h>
 #endif
 
+#include <boost/range/algorithm/find.hpp>
+
 Sim::Sim(bool verbose)
   : m_verbose(verbose), m_scene("unspecified"), m_output_directory(""), m_vs(NULL), m_dt(0),
     m_time(0), m_frameid(0), m_finished(false), m_nearest_vertex(-1), m_nearest_edge(-1),
@@ -96,6 +98,8 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addBooleanOption("output-obj", false);
     Options::addIntegerOption("output-obj-every-n-frames",
                               0); // 0 means synching with simulation frame rate (equivalent to 1).
+    Options::addStringOption("frames-to-save", "");
+
     Options::addDoubleOption("remeshing-resolution", 0.1);
     Options::addIntegerOption("remeshing-iterations", 1);
     Options::addIntegerOption("initial-remeshing-iterations", 1);
@@ -161,6 +165,8 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
 #endif
         std::cout << "Outputing to directory: " << m_output_directory << std::endl;
     }
+
+    initFramesToSave();
 
     if (m_scene == "load")
     {
@@ -291,6 +297,31 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     return true;
 }
 
+void Sim::initFramesToSave()
+{
+    m_frames_to_save.clear();
+    std::string frames_to_save_option = Options::strValue("frames-to-save");
+    if (frames_to_save_option.empty())
+    {
+        return;
+    }
+    size_t current_frame_number_begin = 0;
+    while (current_frame_number_begin < frames_to_save_option.size())
+    {
+        size_t current_frame_number_end = frames_to_save_option.find(":", current_frame_number_begin);
+        std::cout << "Substring: " << frames_to_save_option.substr(current_frame_number_begin, current_frame_number_end - current_frame_number_begin) << std::endl;
+        m_frames_to_save.push_back(
+                std::stoi(frames_to_save_option.substr(current_frame_number_begin, current_frame_number_end)));
+
+        if (current_frame_number_end == std::string::npos)
+        {
+            break;
+        }
+
+        current_frame_number_begin = current_frame_number_end + 1;
+    }
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //  Time stepping
@@ -419,7 +450,10 @@ Sim::stepOutput(bool headless)
 
         int meshfd = Options::intValue("output-mesh-every-n-frames");
         bool outputmesh = Options::boolValue("output-mesh");
-        if ((meshfd == 0 || frameid % meshfd == 0) && outputmesh)
+        if (
+                ((meshfd == 0 || frameid % meshfd == 0) && outputmesh)
+            ||  boost::find(m_frames_to_save, frameid) != m_frames_to_save.end()
+           )
         {
             std::stringstream mesh_ss;
             mesh_ss << m_output_directory << "/mesh" << std::setfill('0') << std::setw(6) << frameid
@@ -689,7 +723,7 @@ Sim::render(RenderMode rm, const Vec2d& mousepos, int selection_mask)
     for (size_t i = 0; i < m_vs->mesh().nv(); i++)
         vn[i].normalize();
 
-    if (true)
+    if (false)
     {
         glLineWidth(5);
         glBegin(GL_LINES);
