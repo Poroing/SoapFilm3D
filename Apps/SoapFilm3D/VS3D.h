@@ -285,6 +285,25 @@ class VS3D
 .    */
     std::vector<Vec2i> getVertexIncidentRegionPairs(size_t vertex_index) const;
     std::vector<int> getVertexIncidentRegions(size_t vertex_index) const;
+    bool isVertexIncidentToRegionPair(size_t vertex_index, const Vec2i& region_pair) const;
+
+    /**
+     *  Returns if a permutation of a given region pair is equal to the other region pair.
+     */
+    static bool areRegionPairTheSame(const Vec2i& lhs, const Vec2i& rhs) {
+        return (lhs[1] == rhs[0] && lhs[0] == rhs[1])
+            || (lhs[0] == rhs[0] && lhs[1] == rhs[1]);
+    }
+    static bool areRegionPairTheSame(const LosTopos::Vec2i& lhs, const Vec2i& rhs) {
+        return areRegionPairTheSame(vc(lhs), rhs);
+    }
+    static bool areRegionPairTheSame(const Vec2i& lhs, const LosTopos::Vec2i& rhs) {
+        return areRegionPairTheSame(lhs, vc(rhs));
+    }
+    static bool areRegionPairTheSame(const LosTopos::Vec2i& lhs, const LosTopos::Vec2i& rhs) {
+        return areRegionPairTheSame(vc(lhs), vc(rhs));
+    }
+
     Vec3i getTriangleWithNormalTowardRegionWithSmallerIndex(size_t triangle_index) const;
     Vec3d getGreensFunctionGradient(const Vec3d& argument) const;
 
@@ -465,6 +484,22 @@ class VS3D
 
     void pre_smoothing(const LosTopos::SurfTrack& st, void** data);
     void post_smoothing(const LosTopos::SurfTrack& st, void* data);
+
+    /**
+     *  Set the given vertex Gamma from the two other given vertex Gamma and the adjacent vertices
+     *  Gammas. For each region pair incident to the given vertex. If none of the vertex index
+     *  are incident to the region pair use the mean of the adjacent vertices. Otherwise if
+     *  only one of them is incident use the Gamma of this vertex. Otherwise use a weighted
+     *  average between the two given vertices Gammas.
+     *
+     */
+    void setVertexGammaFromTwoVertices(size_t vertex_index,
+                                    const GammaType& vertex_0_Gammas,
+                                    const Vec3d& vertex_0,
+                                    const std::vector<Vec2i>& vertex_0_incident_region_pairs,
+                                    const GammaType& vertex_1_Gammas,
+                                    const Vec3d& vertex_1,
+                                    const std::vector<Vec2i>& vertex_1_incident_region_pairs);
 
     std::ostream& log()
     {

@@ -10,9 +10,9 @@
 #include "VS3D.h"
 #include "ADT/adreal.h"
 #include "ADT/advec.h"
+#include "GeometryUtil.h"
 #include "LosTopos/LosTopos3D/subdivisionscheme.h"
 #include "SimOptions.h"
-#include "GeometryUtil.h"
 #include "fmmtl/fmmtl/util/Clock.hpp"
 
 #include <Eigen/IterativeLinearSolvers>
@@ -686,7 +686,7 @@ VS3D::umbrellaSmoothing(double dt)
             }
 
             umbrella_laplacian /= getVertexAreaIncidentToRegionPair(vertex_index, region_pair);
-            //umbrella_laplacian *= 6. / (double)number_adjacent_vertices;
+            // umbrella_laplacian *= 6. / (double)number_adjacent_vertices;
             new_gammas[vertex_index][region_pair_index] =
               Gamma(vertex_index).get(region_pair)
               + simOptions().smoothing_coef * dt * umbrella_laplacian;
@@ -897,7 +897,8 @@ VS3D::getVertexAreaIncidentToRegion(size_t vertex_index, int region) const
     return area;
 }
 
-Vec3d VS3D::getEdgeTangent(size_t edge_index) const
+Vec3d
+VS3D::getEdgeTangent(size_t edge_index) const
 {
     return (pos(mesh().m_edges[edge_index][1]) - pos(mesh().m_edges[edge_index][0])).normalized();
 }
@@ -908,7 +909,8 @@ VS3D::getEdgeLength(size_t edge_index) const
     return (pos(mesh().m_edges[edge_index][1]) - pos(mesh().m_edges[edge_index][0])).norm();
 }
 
-bool VS3D::isEdgeTripleJunction(size_t edge_index) const
+bool
+VS3D::isEdgeTripleJunction(size_t edge_index) const
 {
     return mesh().m_edge_to_triangle_map[edge_index].size() > 2;
 }
@@ -1434,6 +1436,19 @@ VS3D::getVertexIncidentRegionPairs(size_t vertex_index) const
     return incident_region_pairs;
 }
 
+bool
+VS3D::isVertexIncidentToRegionPair(size_t vertex_index, const Vec2i& region_pair) const
+{
+    for (size_t incident_triangle : mesh().m_vertex_to_triangle_map[vertex_index])
+    {
+        if (areRegionPairTheSame(region_pair, mesh().get_triangle_label(incident_triangle)))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 Vec3d
 VS3D::getTriangleSheetStrength(size_t triangle_index) const
 {
@@ -1517,15 +1532,17 @@ VS3D::update_dbg_quantities()
     }
 }
 
-std::vector<std::map<int, double>> VS3D::getMeanCurvatures() const
+std::vector<std::map<int, double>>
+VS3D::getMeanCurvatures() const
 {
     return getMeanCurvatures(getEdgeAlignedCurvatures());
 }
 
-std::vector<std::map<int, double>> VS3D::getMeanCurvatures(const std::vector<std::map<int, double>>& edge_aligned_curvatures) const
+std::vector<std::map<int, double>>
+VS3D::getMeanCurvatures(const std::vector<std::map<int, double>>& edge_aligned_curvatures) const
 {
     std::vector<std::map<int, double>> result(mesh().nv());
- 
+
     std::vector<std::map<int, double>> curvature = getEdgeAlignedCurvatures();
     std::vector<double> avg_vertex_areas(mesh().nv(), 0.);
 
@@ -1575,7 +1592,8 @@ std::vector<std::map<int, double>> VS3D::getMeanCurvatures(const std::vector<std
                 }
 
                 Vec3d et = getEdgeTangent(edge_index);
-                second_fundamental_form += et * et.transpose() * curvature[edge_index][incident_region];
+                second_fundamental_form +=
+                  et * et.transpose() * curvature[edge_index][incident_region];
                 mean_curvature += curvature[edge_index][incident_region];
                 counter++;
 #ifdef FANGS_VERSION
@@ -1588,7 +1606,8 @@ std::vector<std::map<int, double>> VS3D::getMeanCurvatures(const std::vector<std
 #ifdef FANGS_VERSION
             vertex_area = getVertexAreaIncidentToRegion(region);
 #ifdef FANGS_PATCHED
-            if (isEdgeTripleJunction(edge_index)) // if the vertex is a triple junction, its domain should then be smaller.
+            if (isEdgeTripleJunction(edge_index)) // if the vertex is a triple junction, its domain
+                                                  // should then be smaller.
             {
                 vertex_area = triple_junction_length_sum * m_delta * 1.0;
             }
@@ -1607,7 +1626,8 @@ std::vector<std::map<int, double>> VS3D::getMeanCurvatures(const std::vector<std
     return result;
 }
 
-std::vector<std::map<int, double>> VS3D::getEdgeAlignedCurvatures() const
+std::vector<std::map<int, double>>
+VS3D::getEdgeAlignedCurvatures() const
 {
     std::vector<std::map<int, double>> result(mesh().ne());
     for (size_t edge_index : boost::irange(0lu, mesh().ne()))
@@ -1792,8 +1812,8 @@ struct CollapseTempData
     Vec3d old_x0;
     Vec3d old_x1;
 
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> v0_incident_region_pairs;
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> v1_incident_region_pairs;
+    std::vector<Vec2i> v0_incident_region_pairs;
+    std::vector<Vec2i> v1_incident_region_pairs;
 };
 
 void
@@ -1806,20 +1826,8 @@ VS3D::pre_collapse(const LosTopos::SurfTrack& st, size_t e, void** data)
     td->old_x0 = vc(st.pm_positions[td->v0]);
     td->old_x1 = vc(st.pm_positions[td->v1]);
 
-    td->v0_incident_region_pairs.setZero(m_nregion, m_nregion);
-    for (size_t i = 0; i < st.m_mesh.m_vertex_to_triangle_map[td->v0].size(); i++)
-    {
-        LosTopos::Vec2i l =
-          st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[td->v0][i]);
-        td->v0_incident_region_pairs(l[0], l[1]) = td->v0_incident_region_pairs(l[1], l[0]) = true;
-    }
-    td->v1_incident_region_pairs.setZero(m_nregion, m_nregion);
-    for (size_t i = 0; i < st.m_mesh.m_vertex_to_triangle_map[td->v1].size(); i++)
-    {
-        LosTopos::Vec2i l =
-          st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[td->v1][i]);
-        td->v1_incident_region_pairs(l[0], l[1]) = td->v1_incident_region_pairs(l[1], l[0]) = true;
-    }
+    td->v0_incident_region_pairs = getVertexIncidentRegionPairs(td->v0);
+    td->v1_incident_region_pairs = getVertexIncidentRegionPairs(td->v1);
 
     *data = (void*)td;
     std::cout << "pre collapse: " << e << ": " << td->v0 << " " << td->v1 << std::endl;
@@ -1834,85 +1842,13 @@ VS3D::post_collapse(const LosTopos::SurfTrack& st, size_t e, size_t merged_verte
     assert((st.m_mesh.vertex_is_deleted(td->v0) && merged_vertex == td->v1)
            || (st.m_mesh.vertex_is_deleted(td->v1) && merged_vertex == td->v0));
 
-    Vec3d merged_x = vc(st.pm_positions[merged_vertex]);
-    double s = (merged_x - td->old_x0).dot(td->old_x1 - td->old_x0)
-               / (td->old_x1 - td->old_x0).squaredNorm();
-
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> merged_vertex_incident_region_pairs;
-    merged_vertex_incident_region_pairs.setZero(m_nregion, m_nregion);
-    for (size_t i = 0; i < st.m_mesh.m_vertex_to_triangle_map[merged_vertex].size(); i++)
-    {
-        LosTopos::Vec2i l =
-          st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[merged_vertex][i]);
-        merged_vertex_incident_region_pairs(l[0], l[1]) =
-          merged_vertex_incident_region_pairs(l[1], l[0]) = true;
-    }
-
-    // for region pairs not existing in original v0 and v1, we cannot simply assume 0 circulation
-    // because the neighbors that do have those region pairs
-    //  may have accumulated some amount of circulations, and filling in 0 will cause vorticity
-    //  spikes. The information that should be filled in here can only come from neighbors.
-    GammaType newGamma(m_nregion);
-    newGamma.setZero();
-    for (int i = 0; i < m_nregion; i++)
-    {
-        for (int j = i + 1; j < m_nregion; j++)
-        {
-            if (merged_vertex_incident_region_pairs(i, j))
-            {
-                if (!td->v0_incident_region_pairs(i, j) && !td->v1_incident_region_pairs(i, j))
-                {
-                    double neighborhood_mean = 0;
-                    int neighborhood_counter = 0;
-                    for (size_t k = 0; k < st.m_mesh.m_vertex_to_edge_map[merged_vertex].size();
-                         k++)
-                    {
-                        LosTopos::Vec2st e =
-                          st.m_mesh.m_edges[st.m_mesh.m_vertex_to_edge_map[merged_vertex][k]];
-                        size_t vother = (e[0] == merged_vertex ? e[1] : e[0]);
-                        bool incident_to_this_region_pair = false;
-                        for (size_t l = 0; l < st.m_mesh.m_vertex_to_triangle_map[vother].size();
-                             l++)
-                        {
-                            LosTopos::Vec2i ll = st.m_mesh.get_triangle_label(
-                              st.m_mesh.m_vertex_to_triangle_map[vother][l]);
-                            if ((ll[0] == i && ll[1] == j) || (ll[0] == j && ll[1] == i))
-                            {
-                                incident_to_this_region_pair = true;
-                                break;
-                            }
-                        }
-
-                        if (incident_to_this_region_pair)
-                        {
-                            neighborhood_mean += (*m_Gamma)[vother].get(i, j);
-                            neighborhood_counter++;
-                        }
-                    }
-                    if (neighborhood_counter != 0)
-                        neighborhood_mean /= neighborhood_counter;
-
-                    newGamma.set(i, j, neighborhood_mean);
-                }
-                else if (!td->v0_incident_region_pairs(i, j))
-                {
-                    newGamma.set(i, j, (*m_Gamma)[td->v1].get(i, j));
-                }
-                else if (!td->v1_incident_region_pairs(i, j))
-                {
-                    newGamma.set(i, j, (*m_Gamma)[td->v0].get(i, j));
-                }
-                else
-                {
-                    newGamma.set(i,
-                                 j,
-                                 (*m_Gamma)[td->v0].get(i, j) * (1 - s)
-                                   + (*m_Gamma)[td->v1].get(i, j) * s);
-                }
-            }
-        }
-    }
-    (*m_Gamma)[merged_vertex] = newGamma;
+    setVertexGammaFromTwoVertices(merged_vertex,
+                                  Gamma(td->v0),
+                                  td->old_x0,
+                                  td->v0_incident_region_pairs,
+                                  Gamma(td->v1),
+                                  td->old_x1,
+                                  td->v1_incident_region_pairs);
 
     delete td;
 }
@@ -1925,8 +1861,8 @@ struct SplitTempData
     Vec3d old_x0;
     Vec3d old_x1;
 
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> v0_incident_region_pairs;
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> v1_incident_region_pairs;
+    std::vector<Vec2i> v0_incident_region_pairs;
+    std::vector<Vec2i> v1_incident_region_pairs;
 };
 
 void
@@ -1939,20 +1875,8 @@ VS3D::pre_split(const LosTopos::SurfTrack& st, size_t e, void** data)
     td->old_x0 = vc(st.pm_positions[td->v0]);
     td->old_x1 = vc(st.pm_positions[td->v1]);
 
-    td->v0_incident_region_pairs.setZero(m_nregion, m_nregion);
-    for (size_t i = 0; i < st.m_mesh.m_vertex_to_triangle_map[td->v0].size(); i++)
-    {
-        LosTopos::Vec2i l =
-          st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[td->v0][i]);
-        td->v0_incident_region_pairs(l[0], l[1]) = td->v0_incident_region_pairs(l[1], l[0]) = true;
-    }
-    td->v1_incident_region_pairs.setZero(m_nregion, m_nregion);
-    for (size_t i = 0; i < st.m_mesh.m_vertex_to_triangle_map[td->v1].size(); i++)
-    {
-        LosTopos::Vec2i l =
-          st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[td->v1][i]);
-        td->v1_incident_region_pairs(l[0], l[1]) = td->v1_incident_region_pairs(l[1], l[0]) = true;
-    }
+    td->v0_incident_region_pairs = getVertexIncidentRegionPairs(td->v0);
+    td->v1_incident_region_pairs = getVertexIncidentRegionPairs(td->v1);
 
     *data = (void*)td;
     std::cout << "pre split: " << e << ": " << td->v0 << " " << td->v1 << std::endl;
@@ -1965,85 +1889,13 @@ VS3D::post_split(const LosTopos::SurfTrack& st, size_t e, size_t new_vertex, voi
     std::cout << "post split: " << e << ": " << td->v0 << " " << td->v1 << " => " << new_vertex
               << std::endl;
 
-    Vec3d midpoint_x = vc(st.pm_positions[new_vertex]);
-    double s = (midpoint_x - td->old_x0).dot(td->old_x1 - td->old_x0)
-               / (td->old_x1 - td->old_x0).squaredNorm();
-
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> new_vertex_incident_region_pairs;
-    new_vertex_incident_region_pairs.setZero(m_nregion, m_nregion);
-    for (size_t i = 0; i < st.m_mesh.m_vertex_to_triangle_map[new_vertex].size(); i++)
-    {
-        LosTopos::Vec2i l =
-          st.m_mesh.get_triangle_label(st.m_mesh.m_vertex_to_triangle_map[new_vertex][i]);
-        new_vertex_incident_region_pairs(l[0], l[1]) =
-          new_vertex_incident_region_pairs(l[1], l[0]) = true;
-    }
-
-    // for region pairs not existing in original v0 and v1, we cannot simply assume 0 circulation
-    // because the neighbors that do have those region pairs
-    //  may have accumulated some amount of circulations, and filling in 0 will cause vorticity
-    //  spikes. The information that should be filled in here can only come from neighbors.
-    GammaType newGamma(m_nregion);
-    newGamma.setZero();
-    for (int i = 0; i < m_nregion; i++)
-    {
-        for (int j = i + 1; j < m_nregion; j++)
-        {
-            if (new_vertex_incident_region_pairs(i, j))
-            {
-                if (!td->v0_incident_region_pairs(i, j) && !td->v1_incident_region_pairs(i, j))
-                {
-                    double neighborhood_mean = 0;
-                    int neighborhood_counter = 0;
-                    for (size_t k = 0; k < st.m_mesh.m_vertex_to_edge_map[new_vertex].size(); k++)
-                    {
-                        LosTopos::Vec2st e =
-                          st.m_mesh.m_edges[st.m_mesh.m_vertex_to_edge_map[new_vertex][k]];
-                        size_t vother = (e[0] == new_vertex ? e[1] : e[0]);
-
-                        bool incident_to_this_region_pair = false;
-                        for (size_t l = 0; l < st.m_mesh.m_vertex_to_triangle_map[vother].size();
-                             l++)
-                        {
-                            LosTopos::Vec2i ll = st.m_mesh.get_triangle_label(
-                              st.m_mesh.m_vertex_to_triangle_map[vother][l]);
-                            if ((ll[0] == i && ll[1] == j) || (ll[0] == j && ll[1] == i))
-                            {
-                                incident_to_this_region_pair = true;
-                                break;
-                            }
-                        }
-
-                        if (incident_to_this_region_pair)
-                        {
-                            neighborhood_mean += (*m_Gamma)[vother].get(i, j);
-                            neighborhood_counter++;
-                        }
-                    }
-                    if (neighborhood_counter != 0)
-                        neighborhood_mean /= neighborhood_counter;
-
-                    newGamma.set(i, j, neighborhood_mean);
-                }
-                else if (!td->v0_incident_region_pairs(i, j))
-                {
-                    newGamma.set(i, j, (*m_Gamma)[td->v1].get(i, j));
-                }
-                else if (!td->v1_incident_region_pairs(i, j))
-                {
-                    newGamma.set(i, j, (*m_Gamma)[td->v0].get(i, j));
-                }
-                else
-                {
-                    newGamma.set(i,
-                                 j,
-                                 (*m_Gamma)[td->v0].get(i, j) * (1 - s)
-                                   + (*m_Gamma)[td->v1].get(i, j) * s);
-                }
-            }
-        }
-    }
-    (*m_Gamma)[new_vertex] = newGamma;
+    setVertexGammaFromTwoVertices(new_vertex,
+                                  Gamma(td->v0),
+                                  td->old_x0,
+                                  td->v0_incident_region_pairs,
+                                  Gamma(td->v1),
+                                  td->old_x1,
+                                  td->v1_incident_region_pairs);
 
     delete td;
 }
@@ -2196,10 +2048,6 @@ VS3D::post_snap(const LosTopos::SurfTrack& st, size_t v_kept, size_t v_deleted, 
     assert(st.m_mesh.vertex_is_deleted(v_deleted));
     assert(!st.m_mesh.vertex_is_deleted(v_kept));
 
-    Vec3d merged_x = vc(st.pm_positions[v_kept]);
-    double s = (merged_x - td->old_x0).dot(td->old_x1 - td->old_x0)
-               / (td->old_x1 - td->old_x0).squaredNorm();
-
     std::vector<Vec2i> merged_vertex_incident_region_pairs = getVertexIncidentRegionPairs(v_kept);
 
     if (Options::boolValue("print-snap-info"))
@@ -2213,65 +2061,13 @@ VS3D::post_snap(const LosTopos::SurfTrack& st, size_t v_kept, size_t v_deleted, 
                     std::ostream_iterator<Vec2i>(std::cout, "\n\n"));
     }
 
-    // for region pairs not existing in original v0 and v1, we cannot simply assume 0 circulation
-    // because the neighbors that do have those region pairs
-    //  may have accumulated some amount of circulations, and filling in 0 will cause vorticity
-    //  spikes. The information that should be filled in here can only come from neighbors.
-    GammaType newGamma(m_nregion);
-    newGamma.setZero();
-    for (const Vec2i& region_pair : merged_vertex_incident_region_pairs)
-    {
-        bool is_v0_incident = boost::find(td->v0_incident_region_pairs, region_pair)
-                              != td->v0_incident_region_pairs.end();
-        bool is_v1_incident = boost::find(td->v1_incident_region_pairs, region_pair)
-                              != td->v1_incident_region_pairs.end();
-
-        if (!is_v0_incident && !is_v1_incident)
-        {
-            double neighborhood_mean = 0;
-            int neighborhood_counter = 0;
-            for (size_t vertex_index : getVertexAdjacentVertices(v_kept))
-            {
-                std::vector<Vec2i> vertex_incident_region_pairs =
-                  getVertexIncidentRegionPairs(vertex_index);
-                if (boost::find(vertex_incident_region_pairs, region_pair)
-                    == vertex_incident_region_pairs.end())
-                {
-                    continue;
-                }
-
-                neighborhood_mean += Gamma(vertex_index).get(region_pair);
-                neighborhood_counter++;
-            }
-
-            if (neighborhood_counter != 0)
-                neighborhood_mean /= neighborhood_counter;
-
-            newGamma.set(region_pair, neighborhood_mean);
-        }
-        else if (is_v1_incident && !is_v0_incident)
-        {
-            newGamma.set(region_pair, Gamma(td->v1).get(region_pair));
-        }
-        else if (is_v0_incident && !is_v1_incident)
-        {
-            newGamma.set(region_pair, Gamma(td->v0).get(region_pair));
-        }
-        else
-        {
-            newGamma.set(region_pair,
-                         Gamma(td->v0).get(region_pair) * (1 - s)
-                           + Gamma(td->v1).get(region_pair) * s);
-        }
-    }
-
-    if (Options::boolValue("print-snap-info"))
-    {
-        std::cout << "v0 Gamma = " << Gamma(td->v0) << std::endl;
-        std::cout << "v1 Gamma = " << Gamma(td->v1) << std::endl;
-        std::cout << "new Gamma = " << newGamma << std::endl;
-    }
-    Gamma(v_kept) = newGamma;
+    setVertexGammaFromTwoVertices(v_kept,
+                                  Gamma(td->v0),
+                                  td->old_x0,
+                                  td->v0_incident_region_pairs,
+                                  Gamma(td->v1),
+                                  td->old_x1,
+                                  td->v1_incident_region_pairs);
 
     delete td;
 }
@@ -2284,4 +2080,67 @@ VS3D::pre_smoothing(const LosTopos::SurfTrack& st, void** data)
 void
 VS3D::post_smoothing(const LosTopos::SurfTrack& st, void* data)
 {
+}
+
+void
+VS3D::setVertexGammaFromTwoVertices(size_t vertex_index,
+                                    const GammaType& vertex_0_Gammas,
+                                    const Vec3d& vertex_0,
+                                    const std::vector<Vec2i>& vertex_0_incident_region_pairs,
+                                    const GammaType& vertex_1_Gammas,
+                                    const Vec3d& vertex_1,
+                                    const std::vector<Vec2i>& vertex_1_incident_region_pairs)
+{
+    Vec3d midpoint_x = pos(vertex_index);
+    double s =
+      (midpoint_x - vertex_0).dot(vertex_1 - vertex_0) / (vertex_1 - vertex_0).squaredNorm();
+
+    // for region pairs not existing in original v0 and v1, we cannot simply assume 0 circulation
+    // because the neighbors that do have those region pairs
+    //  may have accumulated some amount of circulations, and filling in 0 will cause vorticity
+    //  spikes. The information that should be filled in here can only come from neighbors.
+    Gamma(vertex_index) = GammaType(m_nregion);
+    for (const Vec2i& region_pair : getVertexIncidentRegionPairs(vertex_index))
+    {
+        bool is_v0_incident = boost::find(vertex_0_incident_region_pairs, region_pair)
+                              != vertex_0_incident_region_pairs.end();
+        bool is_v1_incident = boost::find(vertex_1_incident_region_pairs, region_pair)
+                              != vertex_1_incident_region_pairs.end();
+
+        if (!is_v0_incident && !is_v1_incident)
+        {
+            double neighborhood_mean = 0;
+            int neighborhood_counter = 0;
+            for (size_t vertex_index : getVertexAdjacentVertices(vertex_index))
+            {
+                if (!isVertexIncidentToRegionPair(vertex_index, region_pair))
+                {
+                    neighborhood_mean += Gamma(vertex_index).get(region_pair);
+                    neighborhood_counter++;
+                }
+            }
+
+            if (neighborhood_counter != 0)
+            {
+                neighborhood_mean /= neighborhood_counter;
+            }
+
+            Gamma(vertex_index).set(region_pair, neighborhood_mean);
+        }
+        else if (is_v1_incident && !is_v0_incident)
+        {
+            Gamma(vertex_index).set(region_pair, vertex_1_Gammas.get(region_pair));
+        }
+        else if (is_v0_incident && !is_v1_incident)
+        {
+            Gamma(vertex_index).set(region_pair, vertex_0_Gammas.get(region_pair));
+        }
+        else
+        {
+            Gamma(vertex_index)
+              .set(region_pair,
+                   vertex_0_Gammas.get(region_pair) * (1 - s)
+                     + vertex_0_Gammas.get(region_pair) * s);
+        }
+    }
 }
