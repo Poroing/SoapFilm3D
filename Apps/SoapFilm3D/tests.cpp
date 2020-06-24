@@ -44,38 +44,36 @@ main(int argc, char** argv)
         return std::make_pair(generate_position(), generate_charges());
     };
 
-    double delta = 0.;
-    std::vector<std::pair<Vec3d, Vec3d>> sources_and_charges(
-      static_cast<size_t>(std::pow(2, std::atoi(argv[1]))));
+    double delta = std::atof(argv[1]);
+    size_t fmmtl_expansion_order = std::atoi(argv[2]);
+    double fmmtl_theta = std::atof(argv[3]);
+    size_t fmmtl_minimum_cell_size = std::atoi(argv[4]);
+    size_t winding_expansion_order = std::atoi(argv[5]);
+    double winding_beta = std::atof(argv[6]);
+    size_t number_sources = std::atoi(argv[7]);
+
+    std::vector<std::pair<Vec3d, Vec3d>> sources_and_charges(number_sources);
     std::vector<Vec3d> targets(1000lu);
-    for (size_t number_try : boost::irange(0lu, 100lu))
+
+    Options::addDoubleOption("winding-beta", winding_beta);
+    Options::addIntegerOption("winding-expansion-order", winding_expansion_order);
+    Options::addDoubleOption("fmmtl-theta", fmmtl_theta);
+    Options::addIntegerOption("fmmtl-expansion-order", fmmtl_expansion_order);
+    Options::addIntegerOption("fmmtl-minimum-cell-size", fmmtl_minimum_cell_size);
+
+    std::cout << "Fmmtl" << " " << "BarnesHut" << std::endl;
+    for (size_t number_try : boost::irange(0lu, 1000lu))
     {
         boost::generate(sources_and_charges, generate_source_position_and_charge);
         erase_duplicate_sources(sources_and_charges);
         boost::generate(targets, generate_position);
-
-        Options::addDoubleOption("winding-beta", 4.);
-        Options::addIntegerOption("winding-expansion-order", 2);
         VecXd fast_winding_result =
           BiotSavart_fast_winding_number(sources_and_charges, targets, delta);
         VecXd naive_result = BiotSavart_naive(sources_and_charges, targets, delta);
-        Options::addDoubleOption("fmmtl-theta", 0.5);
-        Options::addIntegerOption("fmmtl-expansion-order", 20);
-        Options::addIntegerOption("fmmtl-minimum-cell-size", 1);
         VecXd fmmtl_result = BiotSavart_fmmtl(sources_and_charges, targets, delta);
         std::cout << getRelativeDistance(naive_result, fmmtl_result) << " "
                   << getRelativeDistance(naive_result, fast_winding_result) << std::endl;
     }
-
-    // double delta = 0.01;
-
-    // std::cout << "Naive -- Fmmtl: " << getRelativeDistance(naive_result, fmmtl_result) <<
-    // std::endl; std::cout << "Fmmtl -- Fast Winding: " << getRelativeDistance(fast_winding_result,
-    // fmmtl_result)
-    //          << std::endl;
-    // std::cout << "Fast Winding -- Naive: " << getRelativeDistance(naive_result,
-    // fast_winding_result)
-    //          << std::endl;
 
     return 0;
 }

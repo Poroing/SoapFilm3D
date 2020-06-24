@@ -1,0 +1,43 @@
+% This file must be inputed using \input into another file which contains a definition of the
+% commands \deltaparameters and \method
+% Also \showoutliers can be defined to show the outliers in the box plots.
+
+\documentclass{standalone}
+
+\usepackage[utf8]{inputenc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.15}
+\usepgfplotslibrary{statistics}
+
+\makeatletter
+\pgfplotsset{
+    boxplot/hide outliers/.code={
+        \def\pgfplotsplothandlerboxplot@outlier{}%
+    }
+}
+\makeatother
+
+\ifdefined\showoutliers
+  \pgfplotsset{outliers/.style={}}
+\else
+  \pgfplotsset{outliers/.style={/pgfplots/boxplot/hide outliers}}
+\fi
+
+\newcommand{\tablepath}[1]{delta_evaluation_#1.csv}
+
+\begin{document}
+
+\begin{tikzpicture}
+    %\begin{loglogaxis}
+    \begin{axis}[
+        ylabel={Error},
+        legend pos={north west},
+        boxplot/draw direction=y,
+    ]
+
+    \foreach \deltaparameter in {\deltaparameters}
+      \addplot+[boxplot, outliers] table [y=\method] {\tablepath{\deltaparameter}};
+    \end{axis}
+\end{tikzpicture}
+
+\end{document}
