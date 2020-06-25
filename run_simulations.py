@@ -11,6 +11,7 @@ import time
 import collections
 import os
 import collections.abc
+import textwrap
 
 class FailedSimulation(Exception):
 
@@ -298,36 +299,129 @@ class SimulationParameterProduct(object):
 if  __name__ == '__main__':
 
     argument_parser = argparse.ArgumentParser(
-            description='Run foam experiment of increasing size and record the time took to execute'
-                'the Fast Multipole Method')
-    argument_parser.add_argument(
-            '-m', '--method', action='append', choices=['fmmtl', 'naive'], default=[])
-    argument_parser.add_argument('-s', '--save-mesh', action='store_true')
-    argument_parser.add_argument('-T', '--save-mesh-period', type=int, default=1)
-    argument_parser.add_argument('-c', '--config')
-    argument_parser.add_argument('-t', '--simulation-time', type=float, default=4.0)
-    argument_parser.add_argument('-o', '--sim-option', action='append', default=[])
-    argument_parser.add_argument('--no-save-stdout' , action='store_true')
-    argument_parser.add_argument('--profile', action='store_true')
+            description=textwrap.dedent('''\
+                Run soap films simulations on the product of sets of simulation options.
+                Example:
+
+                    ./run_simulations.py \\
+                        -o mesh-size-n=3 \\
+                        -o mesh-size-m=1,2 \\
+                        -o scene=mergedbubblelattice,2dbubblelattice
+
+                runs the soap film simulation with options
+
+                    (mesh-size-n=2, mesh-size-m=1, scene=mergedbubblelattice)
+                    (mesh-size-n=2, mesh-size-m=1, scene=2dbubblelattice)
+                    (mesh-size-n=2, mesh-size-m=2, scene=mergedbubblelattice)
+                    (mesh-size-n=2, mesh-size-m=2, scene=2dbubblelattice)
+
+                and stores the standard output, config files, objs, png and rec in respectively:
+
+                    <output-directory>/Mesh-size-m1/SceneMergedbubblelattice
+                    <output-directory>/Mesh-size-m1/Scene2dbubblelattice
+                    <output-directory>/Mesh-size-m2/SceneMergedBubbleLattice
+                    <output-directory>/Mesh-size-m2/Scene2dbubblelattice
+
+                Note that there is no directory Mesh-size-n2 as mesh-size-n only takes one value.
+                The standard output is saved in a text file with name stdout.
+                The config file is saved in a text file with name config.txt.
+                The objs,png and rec are stored as the simulation would do in a subdirectory.
+                output.
+                '''),
+            formatter_class=argparse.RawTextHelpFormatter
+        )
+    argument_parser.add_argument('-T', '--save-mesh-period', type=int, default=1,
+            help='Save mesh every T frames')
+    argument_parser.add_argument('-c', '--config',
+        help=textwrap.dedent('''\
+            Base config file. The other options override the options defined in the given config
+            file.
+        ''')
+        )
+    argument_parser.add_argument('-t', '--simulation-time', type=float, default=4.0,
+            help=textwrap.dedent('''
+                Simulation duration. Note that this is not the timeout but the time used to compute
+                how much time-steps are made
+            ''')
+        )
+    argument_parser.add_argument('-o', '--sim-option', action='append', default=[],
+            metavar='<keyword>=<value>|<keyword>=<value>,...,<value>|<keyword>=E:<expression>',
+            help=textwrap.dedent('''\
+                Add given values to the option <keyword>. The first and second form add the given
+                values to the option. The third form evaluate the python expression <expression>
+                which should evaluate to a list that is added to the option.
+            ''')
+            )
+    argument_parser.add_argument('--no-save-stdout' , action='store_true',
+            help=textwrap.dedent('''\
+                Don\'t save standard output in a file and print it out directly to standard output
+            '''))
+    argument_parser.add_argument('--profile', action='store_true',
+        help=textwrap.dedent('''\
+            Profile the simulation. To use this the executable must have been link with -lprofiler.
+            This causes the simulation to stop multithreading and to save the profiling data in the
+            related directory as prof.out. See the documentation on gperftools to understand how to
+            use this file.
+        ''')
+        )
     argument_parser.add_argument('--no-run', action='store_true',
-        help='The simulaton is not run, only the configuration file is saved.')
-    argument_parser.add_argument('--no-headless', action='store_true')
-    argument_parser.add_argument('--directory-order', action='append', default=[])
+        help=textwrap.dedent('''\
+            The simulaton is not run, only the configuration file is saved.
+        ''')
+        )
+    argument_parser.add_argument('--no-headless', action='store_true',
+        help='A window with the simulation is created')
+    argument_parser.add_argument('--directory-order', action='append', default=[],
+            help=textwrap.dedent('''\
+                Specify in which order the directories should be saved. Each options with more
+                than one value must be specified.
+                Example:
+
+                    ./run_simulations.py \\
+                        -o mesh-size-m=1,2 \\
+                        -o scene=mergedbubblelattice,2dbubblelattice\\
+                        --directory-order scene --directory-order mesh-size-m
+
+                This will save the results in directories\
+
+                    <output_directory>/Scene<value>/Mesh-size-m<value>
+
+                instead of
+
+                    <output_directory>/Mesh-size-m<value>/Scene<value>/
+            ''')
+            )
     argument_parser.add_argument('--retry-on-failed-initialization', action='store_true',
-        help='Implies no --no-save-stdout')
+        help=textwrap.dedent('''\
+            This causes the simulation to be rerun if it failed during the initialization (before it
+            has simulated the first step. Implies no --no-save-stdout.
+        ''')
+        )
     argument_parser.add_argument('--retry-on-not-enough-spheres', action='store_true',
-        help='Implies no --no-save-stdout')
+        help=textwrap.dedent('''
+            Some scenes, such as newfoam can throw a std::runtime_error because they were not
+            able to produce the asked number of sphere. This causes to retry the simulation when
+            it happen. Implies no --no-save-stdout
+        ''')
+        )
     argument_parser.add_argument('--load',
-        help='Load simulations produced with this program. Implies -o scene=load --no-headless'
-            ' --no-save-stdout. The options must be specified in the same order for this to work' 
-            ' correctly.')
+        help=textwrap.dedent('''\
+            Load simulations produced with this program. The -T argument should be the same used to
+            save the simulation. Implies -o scene=load --no-headless --no-save-stdout. The options
+            must be specified in the same order for this to work correctly.
+            ''')
+        )
     argument_parser.add_argument('--timeout', type=float,
             help='Stops each simulation after TIMEOUT seconds.')
-    argument_parser.add_argument('--global-timeout', type=float)
+    argument_parser.add_argument('--global-timeout', type=float,
+        help='Stop every simulation when timeout GLOBAL_TIMEOUT has passed')
     argument_parser.add_argument('--unstability-algorithm', type=int, metavar='N',
-            help='Starts with the given simulation timeout and double the timeout each time '
-                'N consecutive simulation timeout. This allows to run as many simulation as you '
-                'want without unstable taking all the allocated time.')
+            help=textwrap.dedent('''\
+                Starts with the given simulation timeout and double the timeout each time N
+                consecutive simulation timeout. This allows to run as many simulation as you want
+                without unstable taking all the allocated time.
+            ''')
+            )
     argument_parser.add_argument('output_directory')
     args = argument_parser.parse_args()
 
@@ -346,7 +440,6 @@ if  __name__ == '__main__':
         exit(1)
 
 
-    config.output_mesh = args.save_mesh
     config.output_mesh_every_n_frames = args.save_mesh_period
     config.load_increment = args.save_mesh_period
     config.simulation_time = args.simulation_time
