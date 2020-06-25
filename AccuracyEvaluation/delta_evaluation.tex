@@ -6,7 +6,7 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage{pgfplots}
-\pgfplotsset{compat=1.15}
+\pgfplotsset{compat=1.13}
 \usepgfplotslibrary{statistics}
 
 \makeatletter
@@ -35,7 +35,7 @@
         boxplot/draw direction=y,
     ]
 
-    \foreach \deltaparameter in {\deltaparameters}
+    \foreach \deltaparameter in \deltaparameters
       \addplot+[boxplot, outliers] table [y=\method] {\tablepath{\deltaparameter}};
     \end{axis}
 \end{tikzpicture}
