@@ -221,7 +221,7 @@ BiotSavart(VS3D& vs, const VecXd& dx)
     }
     else
 #endif
-      if (Options::strValue("fast-summation") == "naive")
+    if (Options::strValue("fast-summation") == "naive")
     {
         result = BiotSavart_naive(sources_and_charges, targets, vs.delta());
     }
@@ -232,6 +232,13 @@ BiotSavart(VS3D& vs, const VecXd& dx)
     else
     {
         throw std::runtime_error("Non Implemented Fast Summation Method");
+    }
+
+    if (Options::boolValue("print-biot-savart-error"))
+    {
+        VecXd naive_result = BiotSavart_naive(sources_and_charges, targets, vs.delta());
+        double error = (naive_result - result).cwiseAbs().maxCoeff() / (naive_result.cwiseAbs().maxCoeff() + result.cwiseAbs().maxCoeff());
+        std::cout << "Error " << error << std::endl;
     }
 
     std::cout << "BiotSavartExecution " << biot_savart_duration.seconds() << std::endl;

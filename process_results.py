@@ -1,9 +1,12 @@
-from foam_fmm_evaluation import *
+#!/usr/bin/python3
+
+import os
 import pathlib
+import sys
+from run_simulations import *
 import argparse
 from divide_frame_number import dividesFramesNumber 
 import csv
-import sys
 import multiprocessing
 
 def hasTimedout(output_directory, path, set_time):
@@ -352,7 +355,7 @@ class Csv(Process):
             csv_writer.writerows(data)
 
 class CsvExecutionTime(Csv):
-    TOKEN = ['NumberVertices', 'BiotSavartExecution']
+    TOKEN = [ 'NumberVertices', 'BiotSavartExecution', 'Error' ]
 
     def processLine(self, line_tokens):
         if line_tokens[0] not in self.TOKEN:

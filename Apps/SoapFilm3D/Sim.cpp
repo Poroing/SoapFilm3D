@@ -86,6 +86,8 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addStringOption("smoothing-type", "laplacian");
     Options::addDoubleOption("regularization-coefficient", 0.5);
 
+    Options::addBooleanOption("print-biot-savart-error", false);
+
     Options::addBooleanOption("print-t1-info", false);
     Options::addBooleanOption("print-snap-info", false);
 

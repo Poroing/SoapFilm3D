@@ -13,6 +13,7 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+#include <Eigen/Geometry>
 
 #include <boost/range/irange.hpp>
 

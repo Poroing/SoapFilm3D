@@ -1,4 +1,4 @@
-#!python3.8
+#!/usr/bin/python3
 
 import pathlib
 import subprocess
@@ -96,6 +96,7 @@ class SoapFilmSimulation(object):
 
     def __init__(self,
             output_directory,
+            simulation_executable,
             delete_existing=False,
             config=None,
             headless=True,
@@ -105,6 +106,7 @@ class SoapFilmSimulation(object):
             retry_on_not_enough_spheres=False,
             profile=False
             ):
+        self.simulation_executable = simulation_executable
         self.capture_stdout = capture_stdout
         self.headless = headless
         self.timeout = timeout
@@ -167,7 +169,7 @@ class SoapFilmSimulation(object):
             print(f'Try {number_tries}')
             completed_process = subprocess.run(
                     [
-                        './SoapFilm3D',
+                        self.simulation_executable,
                         self.config_file.as_posix(),
                         'headless' if self.headless else 'output'
                     ],
@@ -422,6 +424,9 @@ if  __name__ == '__main__':
                 without unstable taking all the allocated time.
             ''')
             )
+    argument_parser.add_argument(
+            '--simulation-executable',
+            default=pathlib.Path(__file__).parent / 'build' / 'Apps' / 'SoapFilm3D' / 'SoapFilm3D')
     argument_parser.add_argument('output_directory')
     args = argument_parser.parse_args()
 
@@ -493,6 +498,7 @@ if  __name__ == '__main__':
 
         simulation = SoapFilmSimulation(
                 experiment_path,
+                args.simulation_executable,
                 delete_existing=True,
                 capture_stdout=not args.no_save_stdout,
                 config=config,

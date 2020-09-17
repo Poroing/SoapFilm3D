@@ -157,3 +157,30 @@ bool Options::boolValue(const std::string & key)
     return s_options[key].bool_value;
 }
 
+void Options::setStringOption(const std::string& key, const std::string& value)
+{
+    assert(s_options.find(key) != s_options.end()); // verify this option exists
+    assert(s_options[key].type == STRING);         // verify this option has the correct type
+    s_options[key].str_value = value;
+}
+
+void Options::setIntegerOption(const std::string& key, int value)
+{
+    assert(s_options.find(key) != s_options.end()); // verify this option exists
+    assert(s_options[key].type == INTEGER);         // verify this option has the correct type
+    s_options[key].int_value = value;
+}
+
+void Options::setDoubleOption(const std::string& key, double value)
+{
+    assert(s_options.find(key) != s_options.end()); // verify this option exists
+    assert(s_options[key].type == DOUBLE);         // verify this option has the correct type
+    s_options[key].int_value = value;
+}
+
+void Options::setBooleanOption(const std::string& key, bool value)
+{
+    assert(s_options.find(key) != s_options.end()); // verify this option exists
+    assert(s_options[key].type == BOOLEAN);         // verify this option has the correct type
+    s_options[key].int_value = value;
+}

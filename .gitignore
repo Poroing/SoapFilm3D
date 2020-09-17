@@ -1,7 +1,17 @@
+# Frame produced by the simulations
 */frame*.*
-build*/*
+# Build directory
+build*/* 
+
 *.mat
 pngs/*
 *.bin
 .DS_Store
 *.off
+
+# Accuracy Evaluation Produced Files
+AccuracyEvaluation/*.csv
+AccuracyEvaluation/*.aux
+AccuracyEvaluation/*.pdf
+AccuracyEvaluation/*.log
+AccuracyEvaluation/MergedBubbleLatticeDelta

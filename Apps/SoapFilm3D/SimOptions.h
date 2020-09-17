@@ -38,6 +38,10 @@ public:
     static int                 intValue(const std::string & key);
     static double              doubleValue(const std::string & key);
     static bool                boolValue(const std::string & key);
+    static void setStringOption(const std::string& key, const std::string& value);
+    static void setIntegerOption(const std::string& key, int value);
+    static void setDoubleOption(const std::string& key, double value);
+    static void setBooleanOption(const std::string& key, bool value);
     
 protected:
     class Option
