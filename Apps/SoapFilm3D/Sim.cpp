@@ -85,6 +85,7 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("bending", 250.0);
     Options::addStringOption("smoothing-type", "laplacian");
     Options::addDoubleOption("regularization-coefficient", 0.5);
+    Options::addStringOption("mean-curvature-computation", "average-area");
 
     Options::addBooleanOption("print-biot-savart-error", false);
 

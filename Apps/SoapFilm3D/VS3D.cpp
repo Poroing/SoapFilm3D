@@ -13,6 +13,7 @@
 #include "GeometryUtil.h"
 #include "LosTopos/LosTopos3D/subdivisionscheme.h"
 #include "SimOptions.h"
+#include "eigenheaders.h"
 #include "fmmtl/fmmtl/util/Clock.hpp"
 
 #include <Eigen/IterativeLinearSolvers>
@@ -70,6 +71,20 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     m_sim_options.bending = Options::doubleValue("bending");
     m_sim_options.maximum_consecutive_timestep_with_collisions =
       Options::intValue("maximum-consecutive-timestep-with-collisions");
+    if (Options::strValue("mean-curvature-computation") == "naive")
+    {
+        m_sim_options.mean_curvature_computation = SimOptions::MeanCurvatureComputation::NAIVE;
+    }
+    else if (Options::strValue("mean-curvature-computation") == "triple-junction-length")
+    {
+        m_sim_options.mean_curvature_computation =
+          SimOptions::MeanCurvatureComputation::TRIPLE_JUNCTION_LENGTH;
+    }
+    else
+    {
+        m_sim_options.mean_curvature_computation =
+          SimOptions::MeanCurvatureComputation::AVERAGE_AREA;
+    }
 
     // construct the surface tracker
     double mean_edge_len = Options::doubleValue("remeshing-resolution");
@@ -865,6 +880,38 @@ VS3D::getVertexDegree(size_t vertex_index) const
     return mesh().m_vertex_to_edge_map[vertex_index].size();
 }
 
+size_t
+VS3D::getVertexNumberIncidentRegions(size_t vertex_index) const
+{
+    std::unordered_set<int> incident_region;
+    for (size_t triangle_index : mesh().m_vertex_to_triangle_map[vertex_index])
+    {
+        const LosTopos::Vec2i& l = mesh().get_triangle_label(triangle_index);
+        incident_region.insert(l[0]);
+        incident_region.insert(l[1]);
+    }
+    return incident_region.size();
+}
+
+double
+VS3D::getVertexAverageAreaIncidentToRegions(size_t vertex_index) const
+{
+    double vertex_area = 0.0;
+    for (size_t triangle_index : mesh().m_vertex_to_triangle_map[vertex_index])
+    {
+        // Multiplying by two because the area incident to both regions incident to the triangle
+        // contribute. (If you don't understand why consider a manifold vertex).
+        vertex_area += m_st->get_triangle_area(triangle_index) * 2.0 / 3;
+    }
+
+    size_t number_incident_regions = getVertexNumberIncidentRegions(vertex_index);
+
+    // A vertex cannot be incident to no regions.
+    assert(number_incident_regions != 0);
+
+    return vertex_area / (double)number_incident_regions;
+}
+
 double
 VS3D::getVertexAreaIncidentToRegionPair(size_t vertex_index, const Vec2i& region_pair) const
 {
@@ -1543,87 +1590,106 @@ VS3D::getMeanCurvatures(const std::vector<std::map<int, double>>& edge_aligned_c
 {
     std::vector<std::map<int, double>> result(mesh().nv());
 
-    std::vector<std::map<int, double>> curvature = getEdgeAlignedCurvatures();
-    std::vector<double> avg_vertex_areas(mesh().nv(), 0.);
-
-    for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
-    {
-        std::set<int> incident_region;
-        double vertex_area = 0.0;
-        for (size_t triangle_index : mesh().m_vertex_to_triangle_map[vertex_index])
-        {
-            const LosTopos::Vec2i& l = mesh().get_triangle_label(triangle_index);
-
-            for (int r = 0; r < 2; ++r)
-            {
-                incident_region.insert(l[r]);
-            }
-
-            vertex_area += m_st->get_triangle_area(triangle_index) / 3 * 2.0;
-        }
-
-        if (incident_region.size() > 0)
-        {
-            avg_vertex_areas[vertex_index] = vertex_area / (double)incident_region.size();
-        }
-    }
-
     for (size_t vertex_index : boost::irange(0lu, mesh().nv()))
     {
         for (int incident_region : getVertexIncidentRegions(vertex_index))
         {
-            double mean_curvature = 0;
-
-            Mat3d second_fundamental_form = Mat3d::Zero();
-            int counter = 0;
-
-#ifdef FANGS_VERSION
-            double vertex_area = 0;
-            double triple_junction_length_sum = 0;
-#else
-            double vertex_area = avg_vertex_areas[vertex_index];
-#endif
-            for (size_t edge_index : mesh().m_vertex_to_edge_map[vertex_index])
-            {
-                // Skip if the edge is not incident to the current region
-                if (curvature[edge_index].find(incident_region) == curvature[edge_index].end())
-                {
-                    continue;
-                }
-
-                Vec3d et = getEdgeTangent(edge_index);
-                second_fundamental_form +=
-                  et * et.transpose() * curvature[edge_index][incident_region];
-                mean_curvature += curvature[edge_index][incident_region];
-                counter++;
-#ifdef FANGS_VERSION
-                if (isEdgeTripleJunction(edge_index))
-                {
-                    triple_junction_length_sum += getEdgeLength(edge_index);
-                }
-#endif
-            }
-#ifdef FANGS_VERSION
-            vertex_area = getVertexAreaIncidentToRegion(region);
-#ifdef FANGS_PATCHED
-            if (isEdgeTripleJunction(edge_index)) // if the vertex is a triple junction, its domain
-                                                  // should then be smaller.
-            {
-                vertex_area = triple_junction_length_sum * m_delta * 1.0;
-            }
-#endif
-#endif
-
-            if (vertex_area == 0)
-                mean_curvature = 0;
-            else
-                mean_curvature = mean_curvature / (vertex_area * 2);
-
-            result[vertex_index][incident_region] = mean_curvature;
+            result[vertex_index][incident_region] = getVertexMeanCurvatureIncidentToRegion(
+              vertex_index, incident_region, edge_aligned_curvatures);
         }
     }
 
     return result;
+}
+
+double
+VS3D::getVertexMeanCurvatureIncidentToRegion(
+  size_t vertex_index,
+  int region,
+  const std::vector<std::map<int, double>>& edge_aligned_curvatures) const
+{
+    switch (m_sim_options.mean_curvature_computation)
+    {
+        case SimOptions::MeanCurvatureComputation::NAIVE:
+            return getVertexMeanCurvatureIncidentToRegionNaive(
+              vertex_index, region, edge_aligned_curvatures);
+        case SimOptions::MeanCurvatureComputation::TRIPLE_JUNCTION_LENGTH:
+            return getVertexMeanCurvatureIncidentToRegionTripleJunctionLength(
+              vertex_index, region, edge_aligned_curvatures);
+        case SimOptions::MeanCurvatureComputation::AVERAGE_AREA:
+            return getVertexMeanCurvatureIncidentToRegionAverageArea(
+              vertex_index, region, edge_aligned_curvatures);
+    }
+}
+
+double
+VS3D::getVertexMeanCurvatureIncidentToRegionNaive(
+  size_t vertex_index,
+  int region,
+  const std::vector<std::map<int, double>>& edge_aligned_curvatures) const
+{
+    return getVertexIntegratedMeanCurvature(vertex_index, region, edge_aligned_curvatures)
+           / getVertexAreaIncidentToRegion(vertex_index, region);
+}
+
+double
+VS3D::getVertexMeanCurvatureIncidentToRegionTripleJunctionLength(
+  size_t vertex_index,
+  int region,
+  const std::vector<std::map<int, double>>& edge_aligned_curvatures) const
+{
+    double integrated_mean_curvature =
+      getVertexIntegratedMeanCurvature(vertex_index, region, edge_aligned_curvatures);
+
+    double triple_junction_length = 0;
+    for (size_t edge_index : mesh().m_vertex_to_edge_map[vertex_index])
+    {
+        if (isEdgeTripleJunction(edge_index))
+        {
+            triple_junction_length += getEdgeLength(edge_index);
+        }
+    }
+
+    if (triple_junction_length > 0)
+    {
+        return integrated_mean_curvature / (triple_junction_length * m_delta);
+    }
+    else
+    {
+        return integrated_mean_curvature / getVertexAreaIncidentToRegion(vertex_index, region);
+    }
+}
+
+double
+VS3D::getVertexMeanCurvatureIncidentToRegionAverageArea(
+  size_t vertex_index,
+  int region,
+  const std::vector<std::map<int, double>>& edge_aligned_curvatures) const
+{
+    return getVertexIntegratedMeanCurvature(vertex_index, region, edge_aligned_curvatures)
+           / getVertexAverageAreaIncidentToRegions(vertex_index);
+}
+
+double
+VS3D::getVertexIntegratedMeanCurvature(
+  size_t vertex_index,
+  int region,
+  const std::vector<std::map<int, double>>& edge_aligned_curvatures) const
+{
+    double integrated_mean_curvature = 0;
+    for (size_t edge_index : mesh().m_vertex_to_edge_map[vertex_index])
+    {
+        // Skip if the edge is not incident to the current region
+        if (edge_aligned_curvatures[edge_index].find(region)
+            == edge_aligned_curvatures[edge_index].end())
+        {
+            continue;
+        }
+
+        integrated_mean_curvature += edge_aligned_curvatures[edge_index].at(region);
+    }
+
+    return integrated_mean_curvature;
 }
 
 std::vector<std::map<int, double>>

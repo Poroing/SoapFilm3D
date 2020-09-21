@@ -64,6 +64,13 @@ class VS3D
             UMBRELLA
         };
 
+        enum class MeanCurvatureComputation
+        {
+            NAIVE,
+            AVERAGE_AREA,
+            TRIPLE_JUNCTION_LENGTH
+        };
+
         bool implicit;
         bool pbd;
         bool looped;
@@ -77,11 +84,13 @@ class VS3D
         double stretching;
         double bending;
         size_t maximum_consecutive_timestep_with_collisions;
+        MeanCurvatureComputation mean_curvature_computation;
 
         SimOptions()
           : implicit(false), pbd(false), smoothing_coef(0), damping_coef(1), sigma(1), gravity(0),
             smoothing_type(SmoothingType::LAPLACIAN),
-            maximum_consecutive_timestep_with_collisions(std::numeric_limits<size_t>::max())
+            maximum_consecutive_timestep_with_collisions(std::numeric_limits<size_t>::max()),
+            mean_curvature_computation(MeanCurvatureComputation::TRIPLE_JUNCTION_LENGTH)
         {
         }
     };
@@ -127,6 +136,9 @@ class VS3D
           boost::transform_iterator(mesh().m_vertex_to_edge_map[vertex_index].end(),
                                     get_other_edge_vertex));
     }
+    /**
+     *  Return the triangles incident to the given region pair.
+     */
     auto getRegionPairIncidentTriangles(const Vec2i& region_pair) const
     {
         auto is_triangle_incident_to_region_pair = [this, &region_pair](size_t triangle_index) {
@@ -140,6 +152,11 @@ class VS3D
     bool isTriangleIncidentToRegion(size_t triangle_index, int region) const;
     int getTriangleOtherIncidentRegion(size_t triangle_index, int region) const;
     size_t getVertexDegree(size_t vertex_index) const;
+    /**
+     * Return the third of the area of each incident triangles divided by the number of regions
+     * incident to the vertex.
+     */
+    double getVertexAverageAreaIncidentToRegions(size_t vertex_index) const;
     double getVertexAreaIncidentToRegionPair(size_t vertex_index, const Vec2i& region_pair) const;
     double getVertexAreaIncidentToRegion(size_t vertex_index, int region) const;
     bool isEdgeTripleJunction(size_t edge_index) const;
@@ -160,12 +177,82 @@ class VS3D
      */
     std::vector<std::map<int, double>> getMeanCurvatures() const;
     /**
-     *  Returns each vertices mapping from region to the associated mean curvature from the given
-     *  edge aligned curvatures.
+     *  Returns each vertices mapping from region to the associated mean curvature.
+     *
+     *  @param edge_aligned_curvatures The precomputed curvature of each region at each edges (See
+     *      getEdgeAlignedCuvatures)
+     *
      */
     std::vector<std::map<int, double>> getMeanCurvatures(const std::vector<std::map<int, double>>& edge_aligned_curvatures) const;
+
     /**
-     *  Returns each edges mapping from region to the associated edge-aligned cuvature.
+     *  Return the curvature of the region at the given vertex.
+     *
+     *  The computation is made with one of the following methods
+     *  getVertexMeanCurvatureIncidentToRegionNaive;
+     *  getVertexMeanCurvatureIncidentToRegionTripleJunctionLength;
+     *  getVertexMeanCurvatureIncidentToRegionAverageArea, depending on the option
+     *  mean-curvature-computation. (See Fei et. al (2019) https://arxiv.org/abs/1910.06402)
+     *
+     *  @param edge_aligned_curvatures The precomputed curvature of each region at each edges (See
+     *      getEdgeAlignedCuvatures)
+     */
+    double getVertexMeanCurvatureIncidentToRegion(size_t vertex_index, int region, const std::vector<std::map<int, double>>& edge_aligned_curvatures) const;
+
+    /**
+     *  Return the curvature of the region at the given vertex.
+     *
+     *  The curvature is divided by the vertex area incident to the given region (See
+     *  getVertexAreaIncidentToRegion).
+     *
+     *  This implementation makes the equilibrium at triple junction highly dependent on the
+     *  triangulation and is unstable.
+     *
+     *  @param edge_aligned_curvatures The precomputed curvature of each region at each edges (See
+     *      getEdgeAlignedCuvatures)
+     */
+    double getVertexMeanCurvatureIncidentToRegionNaive(size_t vertex_index, int region, const std::vector<std::map<int, double>>& edge_aligned_curvatures) const;
+
+    /**
+     *  Return the curvature of the region at the given vertex.
+     *
+     *  The curvature is divided by the vertex area when it is not at a triple junction, otherwise
+     *  the curvature is divided by the tiple junction length multiplied by the regularization
+     *  coefficient.
+     *
+     *  This implementation is not dependent on the triangulation, however, it gives an
+     *  overapproximation of the curvature magnitude
+     *
+     *  @param edge_aligned_curvatures The precomputed curvature of each region at each edges (See
+     *      getEdgeAlignedCuvatures)
+     */
+    double getVertexMeanCurvatureIncidentToRegionTripleJunctionLength(size_t vertex_index, int region, const std::vector<std::map<int, double>>& edge_aligned_curvatures) const;
+
+    /**
+     *  Return the curvature of the region at the given vertex.
+     *
+     *  The curvature is divided by the vertex area when it is not at a triple junction, is divied
+     *  by the average of the area incident to each region incident to the vertex (See
+     *  getVertexAverageAreaIncidentToRegions). 
+     *
+     *  This implementation does not depend on the triangulation and gives a good approximation of
+     *  the curvature magnitude.
+     *
+     *  @param edge_aligned_curvatures The precomputed curvature of each region at each edges (See
+     *      getEdgeAlignedCuvatures)
+     */
+    double getVertexMeanCurvatureIncidentToRegionAverageArea(size_t vertex_index, int region, const std::vector<std::map<int, double>>& edge_aligned_curvatures) const;
+
+    /**
+     *  Return the integrated curvature of the given region around the given vertex. This is the sum
+     *  of the edge-aligned curvature of the region at each edge incident to the vertex.
+     */
+    double getVertexIntegratedMeanCurvature(size_t vertex_index, int region, const std::vector<std::map<int, double>>& edge_aligned_curvatures) const;
+
+    /**
+     *  Returns each edges mapping from region to the associated edge-aligned cuvature. For a given
+     *  edge, the edge-aligned curvature of a region at this edge is the length of this edge times
+     *  the angle made by the triangles incident to the edge that bound the region.
      */
     std::vector<std::map<int, double>> getEdgeAlignedCurvatures() const;
 
@@ -273,18 +360,19 @@ class VS3D
     std::vector<Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>> getVerticesIncidentRegionsPairTensor() const;
     std::vector<std::vector<size_t>> getVerticesIncidentRegions() const;
     /**
-     *  Returns the regions incident to the triangle incident to each vertices. Each pair has the
-     *  region with the lowest index first. Each pair is only present once for each vertex. Note
+     *  Returns the regions pair incident to the triangle incident to each vertices. Each pair has
+     *  the region with the lowest index first. Each pair is only present once for each vertex. Note
      *  that this is different from taking every pair of regions incident to the vertex.
      */
     std::vector<std::vector<Vec2i>> getVerticesIncidentRegionPairs() const;
     /**
-     *  Returns the regions incident to the triangle incident to the given vertex. Each pair has the
-     *  region with the lowest index first. Each pair is only present once. Note that this is
-     *  different from taking every pair of regions incident to the vertex.
+     *  Returns the regions pair incident to the triangle incident to the given vertex. Each pair
+     *  has the region with the lowest index first. Each pair is only present once. Note that this
+     *  is different from taking every pair of regions incident to the vertex.
 .    */
     std::vector<Vec2i> getVertexIncidentRegionPairs(size_t vertex_index) const;
     std::vector<int> getVertexIncidentRegions(size_t vertex_index) const;
+    size_t getVertexNumberIncidentRegions(size_t vertex_index) const;
     bool isVertexIncidentToRegionPair(size_t vertex_index, const Vec2i& region_pair) const;
 
     /**
