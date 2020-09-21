@@ -15,3 +15,12 @@ AccuracyEvaluation/*.aux
 AccuracyEvaluation/*.pdf
 AccuracyEvaluation/*.log
 AccuracyEvaluation/MergedBubbleLatticeDelta
+
+# Files produced by clangd
+.clangd/
+
+# YouCompleteMe configuration file
+.ycm_extra_conf.py
+
+# Python compilation files
+__pycache__/
