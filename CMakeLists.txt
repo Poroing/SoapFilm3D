@@ -20,10 +20,6 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   add_definitions (-DDEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-# Eigen library is required
-find_package (Eigen3 REQUIRED)
-include_directories (${EIGEN3_INCLUDE_DIR})
-
 option (USE_PNG "Builds in support for exporting to png" ON)
 if (USE_PNG)
   find_package (PNG)

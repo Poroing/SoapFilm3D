@@ -38,6 +38,8 @@ set(LIBIGL_USE_STATIC_LIBRARY ON CACHE BOOL "Use libigl as static library" FORCE
 find_package(LIBIGL REQUIRED)
 include_directories(${LIBIGL_INCLUDE_DIR})
 
+# Using libigl Eigen3
+set(EIGEN_INCLUDE_DIR ${LIBIGL_INCLUDE_DIR}/../external/eigen/)
 include_directories (${EIGEN_INCLUDE_DIR})
 
 set(SoapFilm3D_SOURCES ${Sources})
