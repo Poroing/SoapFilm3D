@@ -63,12 +63,6 @@ VS3D::VS3D(const std::vector<LosTopos::Vec3d>& vs,
     }
     m_sim_options.damping_coef = Options::doubleValue("damping-coef");
     m_sim_options.sigma = Options::doubleValue("sigma");
-    m_sim_options.gravity = Options::doubleValue("gravity");
-    m_sim_options.looped = Options::boolValue("looped");
-    m_sim_options.radius = Options::doubleValue("radius");
-    m_sim_options.density = Options::doubleValue("density");
-    m_sim_options.stretching = Options::doubleValue("stretching");
-    m_sim_options.bending = Options::doubleValue("bending");
     m_sim_options.maximum_consecutive_timestep_with_collisions =
       Options::intValue("maximum-consecutive-timestep-with-collisions");
     if (Options::strValue("mean-curvature-computation") == "naive")
@@ -266,14 +260,11 @@ VS3D::step(double dt)
 
     Clock time_step_computation_duration;
 
-    if (counter % 2 == 0)
-    {
+    if (counter % 2 == 0) {
         // mesh improvement
         improveMesh(Options::intValue("remeshing-iterations"));
-    }
-    else
-    {
-        // update gamma due to external forces (surface tension, gravity, etc), and update velocity
+    } else {
+        // update gamma due to external forces (surface tension, etc), and update velocity
         // from gamma
         if (simOptions().implicit)
         {

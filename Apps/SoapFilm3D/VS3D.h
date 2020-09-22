@@ -73,21 +73,15 @@ class VS3D
 
         bool implicit;
         bool pbd;
-        bool looped;
         double smoothing_coef;
         SmoothingType smoothing_type;
         double damping_coef;
         double sigma;
-        double gravity;
-        double radius;
-        double density;
-        double stretching;
-        double bending;
         size_t maximum_consecutive_timestep_with_collisions;
         MeanCurvatureComputation mean_curvature_computation;
 
         SimOptions()
-          : implicit(false), pbd(false), smoothing_coef(0), damping_coef(1), sigma(1), gravity(0),
+          : implicit(false), pbd(false), smoothing_coef(0), damping_coef(1), sigma(1),
             smoothing_type(SmoothingType::LAPLACIAN),
             maximum_consecutive_timestep_with_collisions(std::numeric_limits<size_t>::max()),
             mean_curvature_computation(MeanCurvatureComputation::TRIPLE_JUNCTION_LENGTH)
@@ -508,8 +502,38 @@ class VS3D
     void shiftGammasToGlobalMean();
 
   protected:
+    /**
+     *  Integrate using the surface tension in the circulation (Gammas) and
+     *  moves the vertices according to their speed computed using the Biot-Savart law.
+     *
+     *  This uses a forward euler integration as described in the paper.
+     *
+     *  This does not smooth the circulation, nor does it apply constraints on vertices,
+     *  neither does it computes the circulation of open boundary edges.
+     */
     void step_explicit(double dt);
+
+    /**
+     *  Integrate using the surface tension in the circulation (Gammas) and
+     *  moves the vertices according to their speed computed using the Biot-Savart law.
+     *
+     *  This uses a backward euler integration and is solved using a Newton-Raphson method.
+     *
+     *  This does not smooth the circulation, nor does it apply constraints on vertices,
+     *  neither does it computes the circulation of open boundary edges.
+     */
     void step_implicit(double dt);
+
+    /**
+     *  Integrate the surface tension in the circulation (Gammas) and moves the vertices according
+     *  to their speed computed using the Biot-Savart law as described in the paper.
+     *
+     *  This uses a backward euler integration and is solved using Position Based Dynamics
+     *  optimization.
+     *
+     *  This does not smooth the circulation, nor does it apply constraints on vertices,
+     *  neither does it computes the circulation of open boundary edges.
+     */
     void step_PBD_implicit(double dt);
 
   protected:

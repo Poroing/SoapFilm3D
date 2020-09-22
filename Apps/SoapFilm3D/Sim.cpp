@@ -71,19 +71,12 @@ Sim::init(const std::string& option_file, bool save_outputs, bool headless)
     Options::addDoubleOption("smoothing-coef", 0.0);
     Options::addDoubleOption("damping-coef", 1.0);
     Options::addDoubleOption("sigma", 1.0);
-    Options::addDoubleOption("gravity", 0.0);
     Options::addStringOption("fast-summation", "fmmtl");
     Options::addDoubleOption("winding-beta", 4.);
     Options::addIntegerOption("winding-expansion-order", 2);
     Options::addDoubleOption("fmmtl-theta", .5);
     Options::addIntegerOption("fmmtl-expansion-order", 5);
     Options::addIntegerOption("fmmtl-minimum-cell-size", 128);
-    Options::addBooleanOption("looped", true);
-    Options::addDoubleOption("radius", 5e-5);
-    Options::addDoubleOption("density", 1.32e3);
-    Options::addDoubleOption("stretching", 5000.0);
-    Options::addDoubleOption("bending", 250.0);
-    Options::addStringOption("smoothing-type", "laplacian");
     Options::addDoubleOption("regularization-coefficient", 0.5);
     Options::addStringOption("mean-curvature-computation", "average-area");
 

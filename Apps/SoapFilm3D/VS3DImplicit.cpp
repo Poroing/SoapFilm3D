@@ -412,7 +412,7 @@ void VS3D::step_PBD_implicit(double dt)
     int iter = 0;
     while (!converged && iter < 100)
     {
-        std::cout << "PBS-style iteration " << iter << ": " << std::endl;
+        std::cout << "PBD-style iteration " << iter << ": " << std::endl;
         iter++;
 
         MatXd dvdGamma = MatXd::Zero(nv * 3, ndof);
