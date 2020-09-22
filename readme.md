@@ -92,7 +92,7 @@ a more detailed documentation see [simulation\_options.md](simulation_options.md
 | `pbd-implicit`                              | Choses between Newton's Method (0) or Position Based Dynamics implicit solve (1) | 0              |
 | `RK4-velocity-integration`                  | Do implicit integration using a Runge-Kutta method of order 4                    | 0              |
 | `smoothing-coef`                            | Weight of the circulation smoothing                                              | 0.0            |
-| `damping-coef`                              | Damping coefficient (`e^{-a} where a is the coefficient of the damping force)    | 1.0            |
+| `damping-coef`                              | Damping coefficient (`e^{-a}` where a is the coefficient of the damping force)    | 1.0            |
 | `sigma`                                     | The ratio of surface tension over density                                        | 1.0            |
 | `regularization-coefficient`                | Controls the regularization parameter of the Biot-Savart law                     | .5             |
 | `mean-curvature-computation`                | Choses the method used for computing the mean curvature                          | "average-area" |
