@@ -152,7 +152,6 @@ a more detailed documentation see [simulation\_options.md](simulation_options.md
 | `}`            | Load the 10th mesh forward from the current one (Only works when the scene type is `load`)    |
 | `{`            | Load the 10th mesh backward from the current one (Only works when the scene type is `load`)   |
 | `.`            | Load the 100th mesh forward from the current one (Only works when the scene type is `load`)   |
-
 | `,`            | Load the 100th mesh backward from the current one (Only works when the scene type is `load`)  |
 | `>`            | Load the 1000th mesh forward from the current one (Only works when the scene type is `load`)  |
 | `<`            | Load the 1000th mesh backward from the current one (Only works when the scene type is `load`) |
