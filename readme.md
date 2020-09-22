@@ -158,6 +158,7 @@ a more detailed documentation see [simulation\_options.md](simulation_options.md
 | `<`            | Load the 1000th mesh backward from the current one (Only works when the scene type is `load`) |
 | `o`            | Save current mesh to `mesh.obj`                                                               |
 | `a`/`A`        | Automatically load the next mesh                                                              |
+
 Citations
 --------------------
 Da, Fang, et al. "Double bubbles sans toil and trouble: Discrete circulation-preserving vortex sheets for soap films and foams." ACM Transactions on Graphics (TOG) 34.4 (2015): 149. (http://www.cs.columbia.edu/cg/doublebubbles/)
